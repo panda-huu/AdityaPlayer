@@ -67,26 +67,15 @@ START_IMAGE_URL = getenv("START_IMAGE_URL", "https://graph.org/file/918101d0ad6b
 
 
 async def sudo_users():
-    from .modules.database import adb
+    from .modules.database import get_sudoers_list, add_sudo
     global sudoers
     if OWNER_ID != 0:
-        if OWNER_ID not in sudoers:
-            sudoers.add(OWNER_ID)
-    sudoersdb = adb.sudoers
-    sudousers = await sudoersdb.find_one({"sudo": "sudo"})
-    sudousers = [] if not sudousers else sudousers["sudoers"]
-    if OWNER_ID != 0:
-        if OWNER_ID not in sudousers:
-            sudousers.append(OWNER_ID)
-        await sudoersdb.update_one(
-            {"sudo": "sudo"},
-            {"$set": {"sudoers": sudousers}},
-            upsert=True,
-        )
-    if sudousers:
-        for user_id in sudousers:
-            if user_id not in sudoers:
-                sudoers.add(user_id)
-    logs(__name__).info(f"✅ All Sudo Users Loaded.")
+        sudoers.add(OWNER_ID)
+        await add_sudo(OWNER_ID)
+    sudousers = await get_sudoers_list()
+    for user_id in sudousers:
+        if user_id not in sudoers:
+            sudoers.add(user_id)
+    logs(__name__).info("✅ All Sudo Users Loaded.")
 
 
