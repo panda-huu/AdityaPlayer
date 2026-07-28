@@ -453,16 +453,33 @@ class Call(PyTgCalls):
 
     
     async def start_stream(self, chat_id: int, media_stream):
-        assistant = await group_assistant(self, chat_id)
+    assistant = await group_assistant(self, chat_id)
+    try:
+        await assistant.play(chat_id, media_stream, config=self.call_config)
+        if chat_id not in self.active_chats:
+            self.active_chats.append(chat_id)
+    except NoActiveGroupCall:
+        # Assistant group mein hai ya nahi, ensure karo
         try:
-            await assistant.play(chat_id, media_stream, config=self.call_config)
+            await self.ensure_assistant_in_chat(chat_id)
+        except Exception as e:
+            print(f"[ensure_assistant] {e}", flush=True)
+
+        # Phir se try with auto_start
+        try:
+            await assistant.play(
+                chat_id,
+                media_stream,
+                config=GroupCallConfig(auto_start=True),
+            )
             if chat_id not in self.active_chats:
                 self.active_chats.append(chat_id)
         except NoActiveGroupCall:
-            await self.ensure_assistant_in_chat(chat_id)
-            await assistant.play(chat_id, media_stream, config=self.call_config)
-            if chat_id not in self.active_chats:
-                self.active_chats.append(chat_id)
+            raise AssistantErr(
+                "❌ No active Voice Chat.\n\n"
+                "Pehle group mein **Voice Chat / Video Chat** start karo, "
+                "phir /play ya /vplay use karo."
+            )
         
     
     async def pause_stream(self, chat_id: int):
