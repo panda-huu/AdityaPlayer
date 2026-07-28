@@ -25,13 +25,39 @@ assistantdict = {}
 async def init_db():
     global _pool
     try:
-        url = urlparse(console.DATABASE_URL)
+        dsn = (console.DATABASE_URL or "").strip().strip('"').strip("'")
+        password = (console.DATABASE_PASSWORD or "").strip().strip('"').strip("'")
+
+        if not dsn:
+            raise ValueError("DATABASE_URL is empty")
+
+        url = urlparse(dsn)
+
+        if not url.hostname:
+            raise ValueError(
+                "DATABASE_URL invalid. Correct format:\n"
+                'DATABASE_URL="postgresql://USER@HOST:PORT/DATABASE"\n'
+                'DATABASE_PASSWORD="your_password"'
+            )
+
+        # Safe port
+        try:
+            port = int(url.port) if url.port else 5432
+        except (ValueError, TypeError):
+            port = 5432
+
+        user = url.username
+        database = (url.path or "/postgres").lstrip("/") or "postgres"
+
+        if not user:
+            raise ValueError("DATABASE_URL mein username nahi mila")
+
         _pool = await asyncpg.create_pool(
             host=url.hostname,
-            port=int(url.port) if url.port else 5432,
-            user=url.username,
-            password=console.DATABASE_PASSWORD,
-            database=url.path.lstrip("/"),
+            port=port,
+            user=user,
+            password=password,
+            database=database,
             min_size=2,
             max_size=10,
             command_timeout=30,
