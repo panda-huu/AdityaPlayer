@@ -25,35 +25,19 @@ assistantdict = {}
 async def init_db():
     global _pool
     try:
-        dsn = (console.DATABASE_URL or "").strip().strip('"').strip("'")
-        password = (console.DATABASE_PASSWORD or "").strip().strip('"').strip("'")
+        host = (console.DB_HOST or "").strip().strip('"').strip("'")
+        user = (console.DB_USER or "").strip().strip('"').strip("'")
+        password = (console.DB_PASSWORD or "").strip().strip('"').strip("'")
+        database = (console.DB_NAME or "postgres").strip().strip('"').strip("'")
+        port = int(getattr(console, "DB_PORT", 6543) or 6543)
 
-        if not dsn:
-            raise ValueError("DATABASE_URL is empty")
-
-        url = urlparse(dsn)
-
-        if not url.hostname:
+        if not host or not user:
             raise ValueError(
-                "DATABASE_URL invalid. Correct format:\n"
-                'DATABASE_URL="postgresql://USER@HOST:PORT/DATABASE"\n'
-                'DATABASE_PASSWORD="your_password"'
+                "DB_HOST ya DB_USER missing hai. Config.env check karo."
             )
 
-        # Safe port
-        try:
-            port = int(url.port) if url.port else 5432
-        except (ValueError, TypeError):
-            port = 5432
-
-        user = url.username
-        database = (url.path or "/postgres").lstrip("/") or "postgres"
-
-        if not user:
-            raise ValueError("DATABASE_URL mein username nahi mila")
-
         _pool = await asyncpg.create_pool(
-            host=url.hostname,
+            host=host,
             port=port,
             user=user,
             password=password,
