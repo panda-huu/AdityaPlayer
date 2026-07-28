@@ -313,7 +313,7 @@ class Call(PyTgCalls):
             self.adityaplayer5, cache_duration=100
         )
         
-    call_config = GroupCallConfig(auto_start=False)
+    call_config = GroupCallConfig(auto_start=True)
 
     
     paused = {}
