@@ -45,6 +45,8 @@ try:
     MONGO_URL = getenv("MONGO_URL", None)
     OWNER_ID = int(getenv("OWNER_ID", 0))
     LOG_GROUP_ID = int(getenv("LOG_GROUP_ID", 0))
+    SHRUTI_API_URL = getenv("SHRUTI_API_URL", "https://aruyt.up.railway.app")
+    SHRUTI_API_KEY = getenv("SHRUTI_API_KEY", "YUKI-zi4hcOkYs0tBIAX9QzDc9iTn")
 except Exception as e:
     logs(__name__).error(f"❌ Variable Error: {e}")
     sys.exit()
