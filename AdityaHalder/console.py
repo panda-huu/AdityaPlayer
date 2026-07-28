@@ -48,8 +48,12 @@ try:
     LOG_GROUP_ID = int(getenv("LOG_GROUP_ID", 0))
 
     # PostgreSQL (Mongo completely removed)
-    DATABASE_URL = getenv("DATABASE_URL", None)
-    DATABASE_PASSWORD = getenv("DATABASE_PASSWORD", None)
+    # PostgreSQL — separate vars (no URL parsing issues)
+    DB_HOST = getenv("DB_HOST", None)
+    DB_PORT = int(getenv("DB_PORT", "6543"))
+    DB_USER = getenv("DB_USER", None)
+    DB_PASSWORD = getenv("DB_PASSWORD", None)
+    DB_NAME = getenv("DB_NAME", "postgres")
 
     # YouTube API
     SHRUTI_API_URL = getenv("SHRUTI_API_URL", "https://aruyt.up.railway.app")
