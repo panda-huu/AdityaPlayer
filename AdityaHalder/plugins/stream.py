@@ -400,85 +400,56 @@ async def make_thumbnail(image, title, channel, duration, output):
 
 @bot.on_message(cdz(["play", "vplay"]) & ~filters.private)
 async def start_stream_in_vc(client, message):
-    import os, re, asyncio, traceback
+    import traceback
     from pytgcalls.types import MediaStream, AudioQuality
     from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    from ..platforms import Youtube
 
     chat_id = message.chat.id
     mention = message.from_user.mention if message.from_user else "User"
+    is_video = message.command[0] == "vplay"
 
     try:
         await message.delete()
     except Exception:
         pass
 
-    # 🔹 Step 1: API से डेटा लाओ
     if len(message.command) < 2:
-        return await message.reply_text("❗Usage: `/play <song name>`")
+        return await message.reply_text(f"❗Usage: `/{message.command[0]} <song name>`")
 
     query = " ".join(message.command[1:])
-    aux = await message.reply_text("🔍 Fetching song info from API...")
+    aux = await message.reply_text("🔍 Searching...")
 
     try:
-        song_data = await fetch_song(query)
+        info = await Youtube.search(query)
     except Exception as e:
         tb = traceback.format_exc()
-        return await aux.edit(f"❌ API error: `{e}`\n\n<code>{tb}</code>")
+        return await aux.edit(f"❌ Search error: `{e}`\n\n<code>{tb}</code>")
 
-    if not song_data or "link" not in song_data:
-        return await aux.edit("❌ Song not found in API database.")
+    if not info:
+        return await aux.edit("❌ Song not found.")
 
-    song_link = song_data["link"]
-    vidid = song_data.get("vidid", query)
-    title = f"{vidid}.mp3"
-
-    await aux.edit("🎧 Fetching Telegram message...")
-
-    # 🔹 Step 2: Telegram link से message निकालो
-    m1 = re.search(r"t\.me/([A-Za-z0-9_]+)/(\d+)", song_link)
-    m2 = re.search(r"t\.me/c/(\d+)/(\d+)", song_link)
-    tg_msg = None
+    await aux.edit(f"⬇️ Downloading **{info['title']}**...")
 
     try:
-        if m1:
-            username = m1.group(1)
-            msgid = int(m1.group(2))
-            tg_msg = await client.get_messages(username, msgid)
-        elif m2:
-            raw_chat = m2.group(1)
-            msgid = int(m2.group(2))
-            chat_real = int(f"-100{raw_chat}")
-            tg_msg = await client.get_messages(chat_real, msgid)
+        if is_video:
+            file_path = await Youtube.download_video(info["vidid"])
+        else:
+            file_path = await Youtube.download_song(info["vidid"])
     except Exception as e:
         tb = traceback.format_exc()
-        return await aux.edit(f"❌ Failed to fetch Telegram message: `{e}`\n\n<code>{tb}</code>")
+        return await aux.edit(f"❌ Download error: `{e}`\n\n<code>{tb}</code>")
 
-    if not tg_msg:
-        return await aux.edit("⚠️ Could not access Telegram message (maybe private).")
+    if not file_path:
+        return await aux.edit("❌ Download failed — API se file nahi mili, thodi der baad try karo.")
 
-    # 🔹 Step 3: File download temporarily
-    media = tg_msg.audio or tg_msg.voice or tg_msg.document or tg_msg.video
-    if not media:
-        return await aux.edit("❌ This Telegram message doesn’t contain playable media.")
-
-    file_name = getattr(media, "file_name", "TelegramMedia")
-    temp_path = f"/tmp/{file_name}"
-
-    await aux.edit(f"⬇️ Downloading `{file_name}` from Telegram...")
-    try:
-        await client.download_media(media, file_name=temp_path)
-    except Exception as e:
-        tb = traceback.format_exc()
-        return await aux.edit(f"❌ Download failed: `{e}`\n\n<code>{tb}</code>")
-
-    # 🔹 Step 4: VC Stream Start
     await aux.edit("🎶 Starting Voice Chat stream...")
 
     try:
-        from pytgcalls.types import MediaStream, AudioQuality
         media_stream = MediaStream(
-            media_path=temp_path,
+            media_path=file_path,
             audio_parameters=AudioQuality.HIGH,
+            video_flags=(MediaStream.Flags.AUTO_DETECT if is_video else MediaStream.Flags.IGNORE),
         )
         try:
             await call.stop_stream(chat_id)
@@ -486,32 +457,19 @@ async def start_stream_in_vc(client, message):
             pass
 
         await call.start_stream(chat_id, media_stream)
-        await aux.edit(f"✅ **Now Playing:** `{file_name}`\n📡 [Telegram Link]({song_link})")
+        await aux.edit(f"✅ **Now Playing:** `{info['title']}`")
 
     except Exception as e:
         tb = traceback.format_exc()
         return await aux.edit(f"❌ Failed to start stream: `{e}`\n\n<code>{tb}</code>")
 
-    # 🔹 Step 5: Auto-delete after stream
-    async def auto_delete():
-        await asyncio.sleep(30)
-        try:
-            os.remove(temp_path)
-            print(f"[CLEANUP] Deleted temp file: {temp_path}")
-        except Exception:
-            pass
-
-    asyncio.create_task(auto_delete())
-
-    # 🔹 Step 6: Optional Thumbnail UI
     try:
-        image_path = "AdityaHalder/resource/thumbnail.png"
-        thumb = await generate_thumbnail(image_path)
+        thumb = await generate_thumbnail(info["thumbnail"])
         caption = (
             f"🎵 **Streaming in VC**\n\n"
-            f"**Title:** `{file_name}`\n"
-            f"**Requested by:** {mention}\n"
-            f"**Source:** [Telegram Link]({song_link})"
+            f"**Title:** `{info['title']}`\n"
+            f"**Duration:** {info['duration_min']}\n"
+            f"**Requested by:** {mention}"
         )
         buttons = InlineKeyboardMarkup(
             [[InlineKeyboardButton("🗑️ Close", callback_data="close")]]
