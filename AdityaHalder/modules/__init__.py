@@ -14,8 +14,8 @@ def check_variables():
     if not any([console.STRING1, console.STRING2, console.STRING3, console.STRING4, console.STRING5]):
         console.logs(__name__).info("❌ 'STRING_SESSION' - Not found❗")
         sys.exit()
-    if not console.DATABASE_URL or not console.DATABASE_PASSWORD:
-        console.logs(__name__).info("❌ 'DATABASE_URL' or 'DATABASE_PASSWORD' - Not found❗")
+    if not console.DB_HOST or not console.DB_USER or not console.DB_PASSWORD:
+        console.logs(__name__).info("❌ DB_HOST / DB_USER / DB_PASSWORD - Not found❗")
         sys.exit()
     if console.OWNER_ID == 0:
         console.logs(__name__).info("❌ 'OWNER_ID' - Not found❗")
