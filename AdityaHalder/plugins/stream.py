@@ -398,9 +398,10 @@ async def make_thumbnail(image, title, channel, duration, output):
     return await create_music_thumbnail(image, title, channel, duration, output)
 
 
-@bot.on_message(cdz(["play", "vplay"]) & ~filters.private)
+@bot.on_message(cdz(["play", "vplay"]) & \~filters.private)
 async def start_stream_in_vc(client, message):
     import traceback
+    import time
     from pytgcalls.types import MediaStream, AudioQuality
     from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
     from ..platforms import Youtube
@@ -423,8 +424,7 @@ async def start_stream_in_vc(client, message):
     try:
         info = await Youtube.search(query)
     except Exception as e:
-        tb = traceback.format_exc()
-        return await aux.edit(f"❌ Search error: `{e}`\n\n<code>{tb}</code>")
+        return await aux.edit(f"❌ Search error: `{e}`")
 
     if not info:
         return await aux.edit("❌ Song not found.")
@@ -437,11 +437,10 @@ async def start_stream_in_vc(client, message):
         else:
             file_path = await Youtube.download_song(info["vidid"])
     except Exception as e:
-        tb = traceback.format_exc()
-        return await aux.edit(f"❌ Download error: `{e}`\n\n<code>{tb}</code>")
+        return await aux.edit(f"❌ Download error: `{e}`")
 
     if not file_path:
-        return await aux.edit("❌ Download failed — API se file nahi mili, thodi der baad try karo.")
+        return await aux.edit("❌ Download failed — API se file nahi mili.")
 
     await aux.edit("🎶 Starting Voice Chat stream...")
 
@@ -449,20 +448,43 @@ async def start_stream_in_vc(client, message):
         media_stream = MediaStream(
             media_path=file_path,
             audio_parameters=AudioQuality.HIGH,
-            video_flags=(MediaStream.Flags.AUTO_DETECT if is_video else MediaStream.Flags.IGNORE),
+            video_flags=(
+                MediaStream.Flags.AUTO_DETECT if is_video else MediaStream.Flags.IGNORE
+            ),
         )
         try:
             await call.stop_stream(chat_id)
         except Exception:
             pass
 
+        # Queue clear + add current song
+        call.queue[chat_id] = []
+        await call.add_to_queue(
+            chat_id,
+            media_stream,
+            info["title"],
+            info.get("duration_min", "0:00"),
+            info.get("thumbnail", ""),
+            mention,
+        )
+        # Track start time for progress bar
+        if not hasattr(call, "start_times"):
+            call.start_times = {}
+        call.start_times[chat_id] = time.time()
+        call.stream_on(chat_id) if hasattr(call, "stream_on") else None
+        try:
+            await call.stream_on(chat_id)
+        except Exception:
+            call.paused[chat_id] = False
+
         await call.start_stream(chat_id, media_stream)
         await aux.edit(f"✅ **Now Playing:** `{info['title']}`")
 
     except Exception as e:
         tb = traceback.format_exc()
-        return await aux.edit(f"❌ Failed to start stream: `{e}`\n\n<code>{tb}</code>")
+        return await aux.edit(f"❌ Failed to start stream: `{e}`\n\n<code>{tb[-500:]}</code>")
 
+    # Player panel buttons (PANDAMUSIC style)
     try:
         thumb = await generate_thumbnail(info["thumbnail"])
         caption = (
@@ -472,9 +494,30 @@ async def start_stream_in_vc(client, message):
             f"**Requested by:** {mention}"
         )
         buttons = InlineKeyboardMarkup(
-            [[InlineKeyboardButton("🗑️ Close", callback_data="close")]]
+            [
+                [
+                    InlineKeyboardButton("▷", callback_data=f"PLAYER Resume|{chat_id}"),
+                    InlineKeyboardButton("II", callback_data=f"PLAYER Pause|{chat_id}"),
+                    InlineKeyboardButton("‣‣I", callback_data=f"PLAYER Skip|{chat_id}"),
+                    InlineKeyboardButton("▢", callback_data=f"PLAYER Stop|{chat_id}"),
+                ],
+                [
+                    InlineKeyboardButton(
+                        "0:00 ───────── 0:00",
+                        callback_data=f"PLAYER Progress|{chat_id}",
+                    ),
+                ],
+                [
+                    InlineKeyboardButton("🗑️ Close", callback_data="close"),
+                ],
+            ]
         )
         await aux.delete()
-        await message.reply_photo(photo=thumb, caption=caption, reply_markup=buttons)
+        panel = await message.reply_photo(
+            photo=thumb, caption=caption, reply_markup=buttons
+        )
+        # Save panel message for later edits
+        if chat_id in call.queue and call.queue[chat_id]:
+            call.queue[chat_id][0]["panel"] = panel
     except Exception as e:
-        print(f"[THUMB ERROR] {e}")
+        print(f"[PANEL ERROR] {e}", flush=True)
