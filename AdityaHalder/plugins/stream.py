@@ -9,6 +9,7 @@ import subprocess
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 from pyrogram import filters
+from pyrogram.enums import ParseMode
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from ntgcalls import TelegramServerError
@@ -17,6 +18,7 @@ from pytgcalls.types import MediaStream, ExternalMedia
 from pytgcalls.types import AudioQuality, VideoQuality
 from youtubesearchpython.__future__ import VideosSearch
 
+from ..modules.formatters import panel_caption, queue_caption
 
 import tempfile
 import os
@@ -442,14 +444,14 @@ async def start_stream_in_vc(client, message):
                 info.get("thumbnail", ""),
                 mention,
             )
-            text = (
-                f"**Added to Queue #{pos}**\n\n"
-                f"**Title:** {info['title']}\n"
-                f"**Duration:** {info.get('duration_min', '0:00')}\n"
-                f"**Requested by:** {mention}"
+            text = queue_caption(
+                pos,
+                info["title"],
+                info.get("duration_min", "0:00"),
+                mention,
             )
             buttons = queue_markup(chat_id, pos)
-            await aux.edit(text, reply_markup=buttons)
+            await aux.edit(text, reply_markup=buttons, parse_mode=ParseMode.HTML)
         except Exception as e:
             await aux.edit(f"Queue error: {e}")
         return
@@ -481,21 +483,28 @@ async def start_stream_in_vc(client, message):
 
     try:
         thumb = await generate_thumbnail(info["thumbnail"])
-        caption = (
-            f"Streaming in VC\n\n"
-            f"Title: {info['title']}\n"
-            f"Duration: {info['duration_min']}\n"
-            f"Requested by: {mention}"
+        caption = panel_caption(
+            info["title"],
+            info.get("duration_min", "0:00"),
+            mention,
+            header="sᴛʀᴇᴀᴍɪɴɢ ɪɴ ᴠᴄ",
         )
         total_sec = convert_to_seconds(info.get("duration_min", "0:00"))
         buttons = player_markup(chat_id, 0, total_sec)
         await aux.delete()
         if thumb:
             panel = await message.reply_photo(
-                photo=thumb, caption=caption, reply_markup=buttons
+                photo=thumb,
+                caption=caption,
+                reply_markup=buttons,
+                parse_mode=ParseMode.HTML,
             )
         else:
-            panel = await message.reply_text(caption, reply_markup=buttons)
+            panel = await message.reply_text(
+                caption,
+                reply_markup=buttons,
+                parse_mode=ParseMode.HTML,
+            )
         if chat_id in call.queue and call.queue[chat_id]:
             call.queue[chat_id][0]["panel"] = panel
             call.queue[chat_id][0]["played"] = 0
