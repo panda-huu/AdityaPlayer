@@ -47,19 +47,16 @@ try:
     OWNER_ID = int(getenv("OWNER_ID", 0))
     LOG_GROUP_ID = int(getenv("LOG_GROUP_ID", 0))
 
-    # PostgreSQL (Mongo completely removed)
-    # PostgreSQL — separate vars (no URL parsing issues)
     DB_HOST = getenv("DB_HOST", None)
     DB_PORT = int(getenv("DB_PORT", "6543"))
     DB_USER = getenv("DB_USER", None)
     DB_PASSWORD = getenv("DB_PASSWORD", None)
     DB_NAME = getenv("DB_NAME", "postgres")
 
-    # YouTube API
     SHRUTI_API_URL = getenv("SHRUTI_API_URL", "https://aruyt.up.railway.app")
     SHRUTI_API_KEY = getenv("SHRUTI_API_KEY", "")
 except Exception as e:
-    logs(__name__).error(f"❌ Variable Error: {e}")
+    logs(__name__).error(f"Variable Error: {e}")
     sys.exit(1)
 
 
@@ -74,6 +71,11 @@ START_IMAGE_URL = getenv(
     "START_IMAGE_URL",
     "https://graph.org/file/918101d0ad6b1207e6201.png",
 )
+
+# Start menu links (Config.env se set karo)
+OWNER_USERNAME = getenv("OWNER_USERNAME", "").lstrip("@")
+SUPPORT_CHAT = getenv("SUPPORT_CHAT", "").lstrip("@")
+SUPPORT_CHANNEL = getenv("SUPPORT_CHANNEL", "").lstrip("@")
 
 
 async def sudo_users():
@@ -98,4 +100,4 @@ async def sudo_users():
         if user_id and user_id not in sudoers:
             sudoers.add(user_id)
 
-    logs(__name__).info("✅ All Sudo Users Loaded.")
+    logs(__name__).info("All Sudo Users Loaded.")
