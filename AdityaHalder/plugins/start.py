@@ -32,7 +32,6 @@ def _btn(text: str, style=None, **kwargs) -> InlineKeyboardButton:
     return InlineKeyboardButton(text, **kwargs)
 
 
-# Command list for help menu (shown 3 per row)
 HELP_COMMANDS = [
     ("play", "/play"),
     ("vplay", "/vplay"),
@@ -45,7 +44,6 @@ HELP_COMMANDS = [
     ("broadcast", "/broadcast"),
 ]
 
-# Usage text for each command (smallcaps body)
 CMD_USAGE = {
     "play": (
         f"{smallcaps('command')}: /play\n\n"
@@ -102,83 +100,114 @@ CMD_USAGE = {
 
 
 def start_markup(bot_username: str) -> InlineKeyboardMarkup:
+    """
+    Layout (screenshot style):
+      [ ADD ME IN YOUR GROUP ]
+      [ OWNER ] [ ABOUT ]
+      [ SUPPORT ] [ UPDATE ]
+      [ HELP AND COMMANDS ]
+      [ SOURCE ]
+    """
     owner = getattr(console, "OWNER_USERNAME", "") or ""
     support = getattr(console, "SUPPORT_CHAT", "") or ""
+    channel = getattr(console, "SUPPORT_CHANNEL", "") or ""
 
-    rows = [
-        [
-            _btn(
-                smallcaps("➕ add me to group"),
-                _PRIMARY,
-                url=f"https://t.me/{bot_username}?startgroup=true",
-            ),
-        ],
-        [
-            _btn(smallcaps("📝 help"), _SUCCESS, callback_data="help_menu"),
-        ],
-    ]
-
-    bottom = []
+    # Owner button
     if owner:
-        bottom.append(
-            _btn(smallcaps("👑 owner"), _PRIMARY, url=f"https://t.me/{owner}")
-        )
+        owner_btn = _btn(smallcaps("owner"), _PRIMARY, url=f"https://t.me/{owner}")
     elif getattr(console, "OWNER_ID", 0):
-        bottom.append(
-            _btn(
-                smallcaps("👑 owner"),
-                _PRIMARY,
-                url=f"tg://user?id={console.OWNER_ID}",
-            )
+        owner_btn = _btn(
+            smallcaps("owner"),
+            _PRIMARY,
+            url=f"tg://user?id={console.OWNER_ID}",
         )
+    else:
+        owner_btn = _btn(smallcaps("owner"), _PRIMARY, callback_data="about_menu")
 
+    # Support button
     if support:
-        bottom.append(
-            _btn(smallcaps("💬 support"), _SUCCESS, url=f"https://t.me/{support}")
+        support_btn = _btn(
+            smallcaps("support"), _SUCCESS, url=f"https://t.me/{support}"
+        )
+    else:
+        support_btn = _btn(
+            smallcaps("support"), _SUCCESS, callback_data="support_alert"
         )
 
-    bottom.append(
-        _btn(smallcaps("📦 repo"), _DANGER, callback_data="repo_alert")
+    # Update / channel button
+    if channel:
+        update_btn = _btn(
+            smallcaps("update"), _PRIMARY, url=f"https://t.me/{channel}"
+        )
+    else:
+        update_btn = _btn(
+            smallcaps("update"), _PRIMARY, callback_data="update_alert"
+        )
+
+    return InlineKeyboardMarkup(
+        [
+            [
+                _btn(
+                    smallcaps("➕ add me in your group ➕"),
+                    _PRIMARY,
+                    url=f"https://t.me/{bot_username}?startgroup=true",
+                ),
+            ],
+            [
+                owner_btn,
+                _btn(smallcaps("about"), _SUCCESS, callback_data="about_menu"),
+            ],
+            [
+                support_btn,
+                update_btn,
+            ],
+            [
+                _btn(
+                    smallcaps("help and commands"),
+                    _PRIMARY,
+                    callback_data="help_menu",
+                ),
+            ],
+            [
+                _btn(smallcaps("source"), _DANGER, callback_data="repo_alert"),
+            ],
+        ]
     )
-
-    if bottom:
-        rows.append(bottom)
-
-    return InlineKeyboardMarkup(rows)
 
 
 def help_menu_markup() -> InlineKeyboardMarkup:
-    """Command buttons — 3 per row + Back."""
     rows = []
     row = []
     styles = [_PRIMARY, _SUCCESS, _DANGER]
     for i, (key, _label) in enumerate(HELP_COMMANDS):
         style = styles[i % 3]
-        row.append(
-            _btn(smallcaps(key), style, callback_data=f"cmdhelp|{key}")
-        )
+        row.append(_btn(smallcaps(key), style, callback_data=f"cmdhelp|{key}"))
         if len(row) == 3:
             rows.append(row)
             row = []
     if row:
         rows.append(row)
-
     rows.append(
-        [
-            _btn(smallcaps("🔙 back"), _DANGER, callback_data="home_menu"),
-        ]
+        [_btn(smallcaps("🔙 back"), _DANGER, callback_data="home_menu")]
     )
     return InlineKeyboardMarkup(rows)
 
 
 def cmd_help_markup() -> InlineKeyboardMarkup:
-    """Back to help list + Back to start."""
     return InlineKeyboardMarkup(
         [
             [
                 _btn(smallcaps("📋 commands"), _SUCCESS, callback_data="help_menu"),
                 _btn(smallcaps("🔙 start"), _DANGER, callback_data="home_menu"),
             ],
+        ]
+    )
+
+
+def about_markup() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [_btn(smallcaps("🔙 back"), _DANGER, callback_data="home_menu")],
         ]
     )
 
@@ -204,6 +233,17 @@ def help_list_caption() -> str:
 def cmd_usage_caption(key: str) -> str:
     text = CMD_USAGE.get(key, smallcaps("unknown command"))
     return f"<blockquote expandable>{text}</blockquote>"
+
+
+def about_caption() -> str:
+    body = (
+        f"{smallcaps('about')}\n\n"
+        f"{smallcaps('high quality telegram music bot.')}\n"
+        f"{smallcaps('supports audio and video streaming.')}\n"
+        f"{smallcaps('powered by pytgcalls + kurigram.')}\n\n"
+        f"{smallcaps('add me in your group and start playing.')}"
+    )
+    return f"<blockquote expandable>{body}</blockquote>"
 
 
 async def _edit_menu(query, caption: str, markup: InlineKeyboardMarkup):
@@ -232,7 +272,6 @@ async def start_message_private(client, message):
     caption = start_caption(mention)
     buttons = start_markup(client.me.username)
 
-    # /help directly opens command menu
     if message.command and message.command[0].lower() == "help":
         caption = help_list_caption()
         buttons = help_menu_markup()
@@ -281,6 +320,26 @@ async def start_message_private(client, message):
 @bot.on_callback_query(rgx("repo_alert"))
 async def repo_alert_cb(client, query):
     await query.answer(smallcaps("repo private hai") + " 🔒", show_alert=True)
+
+
+@bot.on_callback_query(rgx("support_alert"))
+async def support_alert_cb(client, query):
+    await query.answer(
+        smallcaps("support chat set nahi hai config me"), show_alert=True
+    )
+
+
+@bot.on_callback_query(rgx("update_alert"))
+async def update_alert_cb(client, query):
+    await query.answer(
+        smallcaps("update channel set nahi hai config me"), show_alert=True
+    )
+
+
+@bot.on_callback_query(rgx("about_menu"))
+async def about_menu_cb(client, query):
+    await _edit_menu(query, about_caption(), about_markup())
+    await query.answer()
 
 
 @bot.on_callback_query(rgx("help_menu"))

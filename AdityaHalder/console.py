@@ -72,10 +72,10 @@ START_IMAGE_URL = getenv(
     "https://graph.org/file/918101d0ad6b1207e6201.png",
 )
 
-# Start menu links (Config.env se set karo)
+# Start menu links
 OWNER_USERNAME = getenv("OWNER_USERNAME", "").lstrip("@")
 SUPPORT_CHAT = getenv("SUPPORT_CHAT", "").lstrip("@")
-SUPPORT_CHANNEL = getenv("SUPPORT_CHANNEL", "").lstrip("@")
+SUPPORT_CHANNEL = getenv("SUPPORT_CHANNEL", "").lstrip("@")  # UPDATE button
 
 
 async def sudo_users():
