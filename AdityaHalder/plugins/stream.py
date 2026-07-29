@@ -379,7 +379,7 @@ async def start_stream_in_vc(client, message):
     import time
     from pytgcalls.types import MediaStream, AudioQuality
     from ..platforms import Youtube
-    from .callbacks import player_markup
+    from .callbacks import player_markup, queue_markup
 
     chat_id = message.chat.id
     mention = message.from_user.mention if message.from_user else "User"
@@ -417,8 +417,6 @@ async def start_stream_in_vc(client, message):
     if not file_path:
         return await aux.edit("Download failed - API se file nahi mili.")
 
-    await aux.edit("Starting Voice Chat stream...")
-
     try:
         media_stream = MediaStream(
             media_path=file_path,
@@ -427,11 +425,40 @@ async def start_stream_in_vc(client, message):
                 MediaStream.Flags.AUTO_DETECT if is_video else MediaStream.Flags.IGNORE
             ),
         )
-        try:
-            await call.stop_stream(chat_id)
-        except Exception:
-            pass
+    except Exception as e:
+        return await aux.edit(f"MediaStream error: {e}")
 
+    already_playing = bool(call.queue.get(chat_id)) or (
+        chat_id in getattr(call, "active_chats", [])
+    )
+
+    # ---------- Already playing → add to QUEUE ----------
+    if already_playing:
+        try:
+            pos = await call.add_to_queue(
+                chat_id,
+                media_stream,
+                info["title"],
+                info.get("duration_min", "0:00"),
+                info.get("thumbnail", ""),
+                mention,
+            )
+            text = (
+                f"**Added to Queue #{pos}**\n\n"
+                f"**Title:** {info['title']}\n"
+                f"**Duration:** {info.get('duration_min', '0:00')}\n"
+                f"**Requested by:** {mention}"
+            )
+            buttons = queue_markup(chat_id, pos)
+            await aux.edit(text, reply_markup=buttons)
+        except Exception as e:
+            await aux.edit(f"Queue error: {e}")
+        return
+
+    # ---------- Nothing playing → start fresh ----------
+    await aux.edit("Starting Voice Chat stream...")
+
+    try:
         call.queue[chat_id] = []
         await call.add_to_queue(
             chat_id,
@@ -450,8 +477,6 @@ async def start_stream_in_vc(client, message):
             call.paused[chat_id] = False
 
         await call.start_stream(chat_id, media_stream)
-        await aux.edit(f"Now Playing: {info['title']}")
-
     except Exception as e:
         tb = traceback.format_exc()
         return await aux.edit(f"Failed to start stream: {e}\n\n{tb[-500:]}")
@@ -465,7 +490,6 @@ async def start_stream_in_vc(client, message):
             f"Requested by: {mention}"
         )
         total_sec = convert_to_seconds(info.get("duration_min", "0:00"))
-        # Same icon panel as Progress callback (no style switch)
         buttons = player_markup(chat_id, 0, total_sec)
         await aux.delete()
         panel = await message.reply_photo(
