@@ -398,7 +398,7 @@ async def make_thumbnail(image, title, channel, duration, output):
     return await create_music_thumbnail(image, title, channel, duration, output)
 
 
-@bot.on_message(cdz(["play", "vplay"]) & \~filters.private)
+@bot.on_message(cdz(["play", "vplay"]) & \~filters.private))
 async def start_stream_in_vc(client, message):
     import traceback
     import time
