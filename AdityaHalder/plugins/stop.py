@@ -4,7 +4,7 @@ from .. import bot, call, cdx
 from ..modules.helpers import AdminsOnlyWrapper
 
 
-@bot.on_message(cdx(["end", "stop"]) & \~filters.private))
+@bot.on_message(cdx(["end", "stop"]) & ~filters.private)
 @AdminsOnlyWrapper
 async def stop_vc_stream(client, message):
     try:

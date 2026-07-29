@@ -4,7 +4,7 @@ from .. import bot, call, cdx
 from ..modules.helpers import AdminsOnlyWrapper
 
 
-@bot.on_message(cdx("pause") & \~filters.private))
+@bot.on_message(cdx("pause") & ~filters.private)
 @AdminsOnlyWrapper
 async def pause_vc_stream(client, message):
     chat_id = message.chat.id
