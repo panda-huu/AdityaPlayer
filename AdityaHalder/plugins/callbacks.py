@@ -4,25 +4,40 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from .. import bot, call, rgx
 
+# Kurigram ButtonStyle (Bot API 9.4+ / MTProto colored buttons)
 try:
     from pyrogram.enums import ButtonStyle
 
+    _STYLE_PRIMARY = ButtonStyle.PRIMARY
+    _STYLE_SUCCESS = ButtonStyle.SUCCESS
+    _STYLE_DANGER = ButtonStyle.DANGER
     _HAS_STYLE = True
-except Exception:
-    ButtonStyle = None
+    print("[buttons] ButtonStyle OK — colored buttons enabled", flush=True)
+except Exception as e:
+    _STYLE_PRIMARY = "primary"
+    _STYLE_SUCCESS = "success"
+    _STYLE_DANGER = "danger"
     _HAS_STYLE = False
+    print(f"[buttons] ButtonStyle missing ({e}) — upgrade kurigram", flush=True)
 
 _progress_tasks = {}
 
 
 def _btn(text: str, callback_data: str, style=None) -> InlineKeyboardButton:
-    """InlineKeyboardButton with optional color style (Kurigram / Bot API 9.4+)."""
-    if _HAS_STYLE and style is not None:
+    """Create button; attach color style when supported."""
+    kwargs = {"text": text, "callback_data": callback_data}
+    if style is not None:
+        # Try enum / style kwarg (Kurigram)
         try:
-            return InlineKeyboardButton(text, callback_data=callback_data, style=style)
+            return InlineKeyboardButton(**kwargs, style=style)
         except TypeError:
             pass
-    return InlineKeyboardButton(text, callback_data=callback_data)
+        # Some builds accept string style
+        try:
+            return InlineKeyboardButton(**kwargs, style=str(getattr(style, "name", style)).lower())
+        except TypeError:
+            pass
+    return InlineKeyboardButton(**kwargs)
 
 
 def _fmt(seconds: int) -> str:
@@ -54,41 +69,33 @@ def _progress_bar(elapsed: int, total: int, width: int = 9) -> str:
 
 def player_markup(chat_id: int, elapsed: int = 0, total: int = 0) -> InlineKeyboardMarkup:
     bar = _progress_bar(elapsed, total)
-    primary = ButtonStyle.PRIMARY if _HAS_STYLE else None
-    success = ButtonStyle.SUCCESS if _HAS_STYLE else None
-    danger = ButtonStyle.DANGER if _HAS_STYLE else None
-
     return InlineKeyboardMarkup(
         [
             [
-                _btn("▷", f"PLAYER Resume|{chat_id}", primary),      # blue
-                _btn("II", f"PLAYER Pause|{chat_id}", success),       # green
-                _btn("‣‣I", f"PLAYER Skip|{chat_id}", primary),       # blue
-                _btn("▢", f"PLAYER Stop|{chat_id}", danger),          # red
+                _btn("▷", f"PLAYER Resume|{chat_id}", _STYLE_PRIMARY),
+                _btn("II", f"PLAYER Pause|{chat_id}", _STYLE_SUCCESS),
+                _btn("‣‣I", f"PLAYER Skip|{chat_id}", _STYLE_PRIMARY),
+                _btn("▢", f"PLAYER Stop|{chat_id}", _STYLE_DANGER),
             ],
             [
-                _btn(bar, f"PLAYER Progress|{chat_id}", success),     # green
+                _btn(bar, f"PLAYER Progress|{chat_id}", _STYLE_SUCCESS),
             ],
             [
-                _btn("🗑 Close", "close", danger),                     # red
+                _btn("🗑 Close", "close", _STYLE_DANGER),
             ],
         ]
     )
 
 
 def queue_markup(chat_id: int, index: int) -> InlineKeyboardMarkup:
-    primary = ButtonStyle.PRIMARY if _HAS_STYLE else None
-    success = ButtonStyle.SUCCESS if _HAS_STYLE else None
-    danger = ButtonStyle.DANGER if _HAS_STYLE else None
-
     return InlineKeyboardMarkup(
         [
             [
-                _btn("▷ Play Now", f"QUEUE Play|{chat_id}|{index}", primary),
-                _btn("‣‣I Skip", f"PLAYER Skip|{chat_id}", success),
+                _btn("▷ Play Now", f"QUEUE Play|{chat_id}|{index}", _STYLE_PRIMARY),
+                _btn("‣‣I Skip", f"PLAYER Skip|{chat_id}", _STYLE_SUCCESS),
             ],
             [
-                _btn("🗑 Close", "close", danger),
+                _btn("🗑 Close", "close", _STYLE_DANGER),
             ],
         ]
     )
