@@ -379,7 +379,7 @@ async def start_stream_in_vc(client, message):
     import time
     from pytgcalls.types import MediaStream, AudioQuality
     from ..platforms import Youtube
-    from .callbacks import player_markup, queue_markup
+    from .callbacks import player_markup, queue_markup, start_progress_task
 
     chat_id = message.chat.id
     mention = message.from_user.mention if message.from_user else "User"
@@ -432,7 +432,6 @@ async def start_stream_in_vc(client, message):
         chat_id in getattr(call, "active_chats", [])
     )
 
-    # ---------- Already playing → add to QUEUE ----------
     if already_playing:
         try:
             pos = await call.add_to_queue(
@@ -455,7 +454,6 @@ async def start_stream_in_vc(client, message):
             await aux.edit(f"Queue error: {e}")
         return
 
-    # ---------- Nothing playing → start fresh ----------
     await aux.edit("Starting Voice Chat stream...")
 
     try:
@@ -492,10 +490,15 @@ async def start_stream_in_vc(client, message):
         total_sec = convert_to_seconds(info.get("duration_min", "0:00"))
         buttons = player_markup(chat_id, 0, total_sec)
         await aux.delete()
-        panel = await message.reply_photo(
-            photo=thumb, caption=caption, reply_markup=buttons
-        )
+        if thumb:
+            panel = await message.reply_photo(
+                photo=thumb, caption=caption, reply_markup=buttons
+            )
+        else:
+            panel = await message.reply_text(caption, reply_markup=buttons)
         if chat_id in call.queue and call.queue[chat_id]:
             call.queue[chat_id][0]["panel"] = panel
+            call.queue[chat_id][0]["played"] = 0
+        start_progress_task(chat_id)
     except Exception as e:
         print(f"[PANEL ERROR] {e}", flush=True)
