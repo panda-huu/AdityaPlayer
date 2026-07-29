@@ -1,7 +1,7 @@
 import os
 import sys
 import runpy
-
+os.system("pip install -U kurigram")
 # Root directory set karo
 ROOT = os.path.dirname(os.path.abspath(__file__))
 os.chdir(ROOT)
