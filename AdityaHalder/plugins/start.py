@@ -1,10 +1,7 @@
-import random
-
 from .. import bot, cdx, rgx, console
 from ..modules.database import add_served_user
-from ..modules.formatters import smallcaps, panel_caption
+from ..modules.formatters import smallcaps
 
-from pyrogram import filters
 from pyrogram.enums import ParseMode
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
@@ -36,6 +33,9 @@ def _btn(text: str, style=None, **kwargs) -> InlineKeyboardButton:
 
 
 def start_markup(bot_username: str) -> InlineKeyboardMarkup:
+    owner = getattr(console, "OWNER_USERNAME", "") or ""
+    support = getattr(console, "SUPPORT_CHAT", "") or ""
+
     rows = [
         [
             _btn(
@@ -49,37 +49,41 @@ def start_markup(bot_username: str) -> InlineKeyboardMarkup:
         ],
     ]
 
-    link_row = []
-    owner = getattr(console, "OWNER_USERNAME", "") or ""
-    support = getattr(console, "SUPPORT_CHAT", "") or ""
+    # Owner + Support / Repo row
+    bottom = []
     if owner:
-        link_row.append(
+        bottom.append(
             _btn(smallcaps("👑 owner"), _PRIMARY, url=f"https://t.me/{owner}")
         )
+    elif getattr(console, "OWNER_ID", 0):
+        bottom.append(
+            _btn(
+                smallcaps("👑 owner"),
+                _PRIMARY,
+                url=f"tg://user?id={console.OWNER_ID}",
+            )
+        )
+
     if support:
-        link_row.append(
+        bottom.append(
             _btn(smallcaps("💬 support"), _SUCCESS, url=f"https://t.me/{support}")
         )
-    if link_row:
-        rows.append(link_row)
 
-    # Agar owner/support env nahi hai to OWNER_ID se owner button
-    if not link_row and getattr(console, "OWNER_ID", 0):
-        rows.append(
-            [
-                _btn(
-                    smallcaps("👑 owner"),
-                    _PRIMARY,
-                    url=f"tg://user?id={console.OWNER_ID}",
-                ),
-                _btn(smallcaps("📝 help"), _SUCCESS, callback_data="help_menu"),
-            ]
-        )
+    # Last button = REPO (alert)
+    bottom.append(
+        _btn(smallcaps("📦 repo"), _DANGER, callback_data="repo_alert")
+    )
+
+    if bottom:
+        rows.append(bottom)
 
     return InlineKeyboardMarkup(rows)
 
 
 def help_markup(bot_username: str) -> InlineKeyboardMarkup:
+    owner = getattr(console, "OWNER_USERNAME", "") or ""
+    support = getattr(console, "SUPPORT_CHAT", "") or ""
+
     rows = [
         [
             _btn(
@@ -89,29 +93,30 @@ def help_markup(bot_username: str) -> InlineKeyboardMarkup:
             ),
         ],
     ]
+
     link_row = []
-    owner = getattr(console, "OWNER_USERNAME", "") or ""
-    support = getattr(console, "SUPPORT_CHAT", "") or ""
     if owner:
         link_row.append(
             _btn(smallcaps("👑 owner"), _PRIMARY, url=f"https://t.me/{owner}")
+        )
+    elif getattr(console, "OWNER_ID", 0):
+        link_row.append(
+            _btn(
+                smallcaps("👑 owner"),
+                _PRIMARY,
+                url=f"tg://user?id={console.OWNER_ID}",
+            )
         )
     if support:
         link_row.append(
             _btn(smallcaps("💬 support"), _SUCCESS, url=f"https://t.me/{support}")
         )
+    link_row.append(
+        _btn(smallcaps("📦 repo"), _DANGER, callback_data="repo_alert")
+    )
     if link_row:
         rows.append(link_row)
-    elif getattr(console, "OWNER_ID", 0):
-        rows.append(
-            [
-                _btn(
-                    smallcaps("👑 owner"),
-                    _PRIMARY,
-                    url=f"tg://user?id={console.OWNER_ID}",
-                ),
-            ]
-        )
+
     rows.append(
         [
             _btn(smallcaps("🔙 back"), _DANGER, callback_data="home_menu"),
@@ -121,7 +126,6 @@ def help_markup(bot_username: str) -> InlineKeyboardMarkup:
 
 
 def start_caption(mention: str) -> str:
-    """Smallcaps expandable caption."""
     body = (
         f"{smallcaps('hey')} {mention}\n\n"
         f"{smallcaps('i am a high quality fast music bot.')}\n"
@@ -173,7 +177,9 @@ async def start_message_private(client, message):
         )
 
     try:
-        full_name = message.from_user.first_name + " " + (message.from_user.last_name or "")
+        full_name = message.from_user.first_name + " " + (
+            message.from_user.last_name or ""
+        )
         username = (
             f"@{message.from_user.username}" if message.from_user.username else "N/A"
         )
@@ -189,6 +195,11 @@ async def start_message_private(client, message):
         )
     except Exception:
         pass
+
+
+@bot.on_callback_query(rgx("repo_alert"))
+async def repo_alert_cb(client, query):
+    await query.answer(smallcaps("repo private hai") + " 🔒", show_alert=True)
 
 
 @bot.on_callback_query(rgx("help_menu"))
