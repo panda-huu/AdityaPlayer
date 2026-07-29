@@ -1,6 +1,6 @@
 import random
 
-from .. import bot, cdz, rgx, console
+from .. import bot, cdx, rgx, console
 from ..modules.database import add_served_user
 
 from pyrogram import filters
@@ -12,12 +12,10 @@ try:
     _PRIMARY = ButtonStyle.PRIMARY
     _SUCCESS = ButtonStyle.SUCCESS
     _DANGER = ButtonStyle.DANGER
-    _HAS_STYLE = True
 except Exception:
     _PRIMARY = "primary"
     _SUCCESS = "success"
     _DANGER = "danger"
-    _HAS_STYLE = False
 
 
 def _btn(text: str, style=None, **kwargs) -> InlineKeyboardButton:
@@ -69,7 +67,7 @@ def help_markup(username: str) -> InlineKeyboardMarkup:
     )
 
 
-@bot.on_message(cdz(["start", "help"]))
+@bot.on_message(cdx(["start", "help"]))
 async def start_message_private(client, message):
     await add_served_user(message.from_user.id)
     mention = message.from_user.mention
