@@ -1,7 +1,10 @@
+import asyncio
 import time
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from .. import bot, call, rgx
+
+_progress_tasks = {}
 
 
 def _fmt(seconds: int) -> str:
@@ -79,10 +82,65 @@ def _get_progress(chat_id: int):
     title = str(item.get("title", "Unknown"))[:30]
     total = _parse_duration(item.get("duration", "0:00"))
     start = getattr(call, "start_times", {}).get(chat_id)
-    elapsed = int(time.time() - start) if start else 0
+    # Pause support: freeze elapsed while paused
+    if await_paused(chat_id):
+        played = item.get("played", 0)
+        elapsed = int(played)
+    else:
+        elapsed = int(time.time() - start) if start else 0
+        item["played"] = elapsed
     if total:
         elapsed = min(elapsed, total)
     return elapsed, total, title
+
+
+def await_paused(chat_id: int) -> bool:
+    return bool(call.paused.get(chat_id))
+
+
+async def _progress_loop(chat_id: int):
+    """Auto-update progress button every 8 seconds."""
+    while True:
+        await asyncio.sleep(8)
+        try:
+            queued = call.queue.get(chat_id)
+            if not queued:
+                break
+            if chat_id not in getattr(call, "active_chats", []):
+                break
+
+            panel = queued[0].get("panel")
+            if not panel:
+                continue
+
+            elapsed, total, _title = _get_progress(chat_id)
+            try:
+                await panel.edit_reply_markup(
+                    reply_markup=player_markup(chat_id, elapsed, total)
+                )
+            except Exception:
+                pass
+
+            if total and elapsed >= total:
+                break
+        except asyncio.CancelledError:
+            break
+        except Exception:
+            break
+
+
+def start_progress_task(chat_id: int):
+    old = _progress_tasks.get(chat_id)
+    if old and not old.done():
+        old.cancel()
+    task = asyncio.create_task(_progress_loop(chat_id))
+    _progress_tasks[chat_id] = task
+
+
+def stop_progress_task(chat_id: int):
+    old = _progress_tasks.pop(chat_id, None)
+    if old and not old.done():
+        old.cancel()
 
 
 @bot.on_callback_query(rgx("close"))
@@ -97,7 +155,6 @@ async def close_cb(client, query):
 async def queue_panel_cb(client, query):
     try:
         parts = query.data.strip().split()
-        # QUEUE Play|{chat_id}|{index}
         action_rest = parts[1]
         action, chat_id_s, index_s = action_rest.split("|")
         chat_id = int(chat_id_s)
@@ -115,7 +172,6 @@ async def queue_panel_cb(client, query):
             if index <= 0 or index >= len(queued):
                 return await query.answer("Song not in queue.", show_alert=True)
 
-            # Move selected track to position 1 (next), then skip current
             item = queued.pop(index)
             queued.insert(1, item)
             call.queue[chat_id] = queued
@@ -153,6 +209,12 @@ async def player_panel_cb(client, query):
         try:
             await call.pause_stream(chat_id)
             await call.stream_off(chat_id)
+            # freeze played time
+            queued = call.queue.get(chat_id) or []
+            if queued:
+                start = getattr(call, "start_times", {}).get(chat_id)
+                if start:
+                    queued[0]["played"] = int(time.time() - start)
             await query.answer("Paused", show_alert=False)
         except Exception as e:
             await query.answer(f"Error: {type(e).__name__}", show_alert=True)
@@ -161,6 +223,12 @@ async def player_panel_cb(client, query):
         try:
             await call.resume_stream(chat_id)
             await call.stream_on(chat_id)
+            # continue from frozen played
+            queued = call.queue.get(chat_id) or []
+            played = int(queued[0].get("played", 0)) if queued else 0
+            if not hasattr(call, "start_times"):
+                call.start_times = {}
+            call.start_times[chat_id] = time.time() - played
             await query.answer("Resumed", show_alert=False)
         except Exception as e:
             await query.answer(f"Error: {type(e).__name__}", show_alert=True)
@@ -169,6 +237,7 @@ async def player_panel_cb(client, query):
         try:
             queued = call.queue.get(chat_id) or []
             if len(queued) <= 1:
+                stop_progress_task(chat_id)
                 await call.close_stream(chat_id)
                 await query.answer("Stopped (queue empty)", show_alert=True)
                 try:
@@ -177,15 +246,13 @@ async def player_panel_cb(client, query):
                     pass
             else:
                 await call.change_stream(chat_id)
-                if not hasattr(call, "start_times"):
-                    call.start_times = {}
-                call.start_times[chat_id] = time.time()
                 await query.answer("Skipped", show_alert=False)
         except Exception as e:
             await query.answer(f"Error: {type(e).__name__}", show_alert=True)
 
     elif action == "Stop":
         try:
+            stop_progress_task(chat_id)
             await call.close_stream(chat_id)
             await query.answer("Stopped", show_alert=False)
             try:
