@@ -8,14 +8,12 @@ from youtubesearchpython.__future__ import VideosSearch
 
 from .. import console
 
-# Safe defaults — crash nahi karega agar env missing ho
 API_URL = getattr(console, "SHRUTI_API_URL", None) or "https://aruyt.up.railway.app"
 API_KEY = getattr(console, "SHRUTI_API_KEY", None) or ""
 DOWNLOAD_DIR = "downloads"
 
 
 def check_duration(file_path: str) -> float:
-    """ffprobe se duration nikaalo. Fail hone pe 0 return."""
     try:
         out = subprocess.check_output(
             [
@@ -32,11 +30,16 @@ def check_duration(file_path: str) -> float:
         return 0.0
 
 
+def _to_vidid(value: str) -> str:
+    value = str(value or "").strip()
+    if "v=" in value:
+        value = value.split("v=")[-1].split("&")[0]
+    if "youtu.be/" in value:
+        value = value.split("youtu.be/")[-1].split("?")[0]
+    return value.strip()
+
+
 async def search(query: str) -> Optional[Dict[str, Any]]:
-    """
-    YouTube pe search karke title / duration / vidid / thumbnail return karta hai.
-    Fail hone pe None return (crash nahi).
-    """
     if not query or not str(query).strip():
         return None
 
@@ -61,19 +64,15 @@ async def search(query: str) -> Optional[Dict[str, Any]]:
 
 
 async def _download(vidid: str, media_type: str, ext: str, timeout_total: int) -> Optional[str]:
-    """
-    Common downloader. Success pe file path, fail pe None.
-    Kabhi exception raise nahi karta.
-    """
-    if not vidid or len(str(vidid).strip()) < 3:
+    vidid = _to_vidid(vidid)
+    if not vidid or len(vidid) < 3:
         return None
 
-    vidid = str(vidid).strip()
     os.makedirs(DOWNLOAD_DIR, exist_ok=True)
     file_path = os.path.join(DOWNLOAD_DIR, f"{vidid}.{ext}")
     loop = asyncio.get_event_loop()
 
-    # Pehle se valid file hai to reuse
+    # Reuse valid cached file
     try:
         if os.path.exists(file_path) and os.path.getsize(file_path) > 1024:
             dur = await loop.run_in_executor(None, check_duration, file_path)
@@ -90,28 +89,55 @@ async def _download(vidid: str, media_type: str, ext: str, timeout_total: int) -
         print("[Youtube] API_KEY missing — download skip", flush=True)
         return None
 
-    for attempt in range(3):
+    # Full URL sometimes works better on API side than bare id
+    full_url = f"https://www.youtube.com/watch?v={vidid}"
+    url_variants = [full_url, vidid]
+
+    for attempt in range(4):
+        use_url = url_variants[attempt % len(url_variants)]
         try:
-            timeout = aiohttp.ClientTimeout(total=timeout_total, connect=20)
+            timeout = aiohttp.ClientTimeout(total=timeout_total, connect=25)
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.get(
                     f"{API_URL.rstrip('/')}/download",
-                    params={"url": vidid, "type": media_type, "api_key": API_KEY},
+                    params={
+                        "url": use_url,
+                        "type": media_type,
+                        "api_key": API_KEY,
+                    },
                 ) as resp:
 
                     if resp.status == 429:
-                        wait = 3 * (attempt + 1)
+                        wait = min(20, 3 * (attempt + 1))
                         retry_after = resp.headers.get("Retry-After")
                         if retry_after and str(retry_after).isdigit():
                             wait = float(retry_after)
-                        print(f"[Youtube] {media_type} 429 — wait {wait}s (try {attempt+1})", flush=True)
+                        print(
+                            f"[Youtube] {media_type} 429 — wait {wait}s (try {attempt+1})",
+                            flush=True,
+                        )
+                        await asyncio.sleep(wait)
+                        continue
+
+                    if resp.status in (500, 502, 503, 504):
+                        body = (await resp.text())[:250]
+                        wait = min(15, 2 ** attempt)
+                        print(
+                            f"[Youtube] {media_type} HTTP {resp.status}: {body} "
+                            f"(try {attempt+1}, wait {wait}s)",
+                            flush=True,
+                        )
                         await asyncio.sleep(wait)
                         continue
 
                     if resp.status != 200:
-                        body = (await resp.text())[:200]
-                        print(f"[Youtube] {media_type} HTTP {resp.status}: {body} (try {attempt+1})", flush=True)
-                        await asyncio.sleep(1)
+                        body = (await resp.text())[:250]
+                        print(
+                            f"[Youtube] {media_type} HTTP {resp.status}: {body} "
+                            f"(try {attempt+1})",
+                            flush=True,
+                        )
+                        await asyncio.sleep(1.5)
                         continue
 
                     with open(file_path, "wb") as f:
@@ -119,13 +145,17 @@ async def _download(vidid: str, media_type: str, ext: str, timeout_total: int) -
                             f.write(chunk)
 
             if not (os.path.exists(file_path) and os.path.getsize(file_path) > 1024):
+                await asyncio.sleep(1)
                 continue
 
             dur = await loop.run_in_executor(None, check_duration, file_path)
             if dur and dur > 2:
                 return file_path
 
-            print(f"[Youtube] {media_type} invalid duration ({dur}s) — retry", flush=True)
+            print(
+                f"[Youtube] {media_type} invalid duration ({dur}s) — retry",
+                flush=True,
+            )
             try:
                 os.remove(file_path)
             except Exception:
@@ -139,31 +169,37 @@ async def _download(vidid: str, media_type: str, ext: str, timeout_total: int) -
             except Exception:
                 pass
         except Exception as e:
-            print(f"[Youtube] {media_type} error (try {attempt+1}): {e}", flush=True)
+            print(
+                f"[Youtube] {media_type} error (try {attempt+1}): {e}",
+                flush=True,
+            )
             try:
                 if os.path.exists(file_path):
                     os.remove(file_path)
             except Exception:
                 pass
 
-        await asyncio.sleep(1)
+        await asyncio.sleep(1.5)
 
+    print(
+        f"[Youtube] {media_type} FAILED after retries for {vidid} "
+        f"(API side yt-dlp/416 issue possible)",
+        flush=True,
+    )
     return None
 
 
 async def download_song(vidid: str) -> Optional[str]:
-    """Audio download. Fail pe None."""
     try:
-        return await _download(vidid, "audio", "mp3", 90)
+        return await _download(vidid, "audio", "mp3", 100)
     except Exception as e:
         print(f"[Youtube.download_song] {e}", flush=True)
         return None
 
 
 async def download_video(vidid: str) -> Optional[str]:
-    """Video download. Fail pe None."""
     try:
-        return await _download(vidid, "video", "mp4", 150)
+        return await _download(vidid, "video", "mp4", 160)
     except Exception as e:
         print(f"[Youtube.download_video] {e}", flush=True)
         return None
