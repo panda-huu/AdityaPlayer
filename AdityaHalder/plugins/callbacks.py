@@ -32,7 +32,6 @@ def _progress_bar(elapsed: int, total: int, width: int = 9) -> str:
 
 
 def player_markup(chat_id: int, elapsed: int = 0, total: int = 0) -> InlineKeyboardMarkup:
-    """Same buttons every time — icons + progress bar."""
     bar = _progress_bar(elapsed, total)
     return InlineKeyboardMarkup(
         [
@@ -44,6 +43,20 @@ def player_markup(chat_id: int, elapsed: int = 0, total: int = 0) -> InlineKeybo
             ],
             [
                 InlineKeyboardButton(bar, callback_data=f"PLAYER Progress|{chat_id}"),
+            ],
+            [
+                InlineKeyboardButton("🗑 Close", callback_data="close"),
+            ],
+        ]
+    )
+
+
+def queue_markup(chat_id: int, index: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("▷ Play Now", callback_data=f"QUEUE Play|{chat_id}|{index}"),
+                InlineKeyboardButton("‣‣I Skip", callback_data=f"PLAYER Skip|{chat_id}"),
             ],
             [
                 InlineKeyboardButton("🗑 Close", callback_data="close"),
@@ -78,6 +91,48 @@ async def close_cb(client, query):
         await query.message.delete()
     except Exception:
         pass
+
+
+@bot.on_callback_query(rgx(r"^QUEUE "))
+async def queue_panel_cb(client, query):
+    try:
+        parts = query.data.strip().split()
+        # QUEUE Play|{chat_id}|{index}
+        action_rest = parts[1]
+        action, chat_id_s, index_s = action_rest.split("|")
+        chat_id = int(chat_id_s)
+        index = int(index_s)
+        action = action.strip()
+    except Exception:
+        return await query.answer("Invalid button.", show_alert=True)
+
+    if not _is_playing(chat_id):
+        return await query.answer("Nothing playing.", show_alert=True)
+
+    if action == "Play":
+        try:
+            queued = call.queue.get(chat_id) or []
+            if index <= 0 or index >= len(queued):
+                return await query.answer("Song not in queue.", show_alert=True)
+
+            # Move selected track to position 1 (next), then skip current
+            item = queued.pop(index)
+            queued.insert(1, item)
+            call.queue[chat_id] = queued
+
+            await call.change_stream(chat_id)
+            if not hasattr(call, "start_times"):
+                call.start_times = {}
+            call.start_times[chat_id] = time.time()
+            await query.answer("Playing now...", show_alert=False)
+            try:
+                await query.message.delete()
+            except Exception:
+                pass
+        except Exception as e:
+            await query.answer(f"Error: {type(e).__name__}", show_alert=True)
+    else:
+        await query.answer("Unknown action.", show_alert=True)
 
 
 @bot.on_callback_query(rgx(r"^PLAYER "))
@@ -122,6 +177,9 @@ async def player_panel_cb(client, query):
                     pass
             else:
                 await call.change_stream(chat_id)
+                if not hasattr(call, "start_times"):
+                    call.start_times = {}
+                call.start_times[chat_id] = time.time()
                 await query.answer("Skipped", show_alert=False)
         except Exception as e:
             await query.answer(f"Error: {type(e).__name__}", show_alert=True)
@@ -149,8 +207,6 @@ async def player_panel_cb(client, query):
             elapsed, total, title = _get_progress(chat_id)
             bar = _progress_bar(elapsed, total)
             await query.answer(f"{title}\n{bar}", show_alert=True)
-
-            # Same icon layout — only progress text changes
             try:
                 await query.message.edit_reply_markup(
                     reply_markup=player_markup(chat_id, elapsed, total)
