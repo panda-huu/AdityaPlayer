@@ -72,15 +72,16 @@ async def fetch_song(query: str):
 
 
 def convert_to_seconds(duration: str) -> int:
-    parts = list(map(int, duration.split(":")))
-    total = 0
-    multiplier = 1
-
-    for value in reversed(parts):
-        total += value * multiplier
-        multiplier *= 60
-
-    return total
+    try:
+        parts = list(map(int, str(duration).split(":")))
+        total = 0
+        multiplier = 1
+        for value in reversed(parts):
+            total += value * multiplier
+            multiplier *= 60
+        return total
+    except Exception:
+        return 0
 
 
 def format_duration(seconds: int) -> str:
@@ -377,8 +378,8 @@ async def start_stream_in_vc(client, message):
     import traceback
     import time
     from pytgcalls.types import MediaStream, AudioQuality
-    from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
     from ..platforms import Youtube
+    from .callbacks import player_markup
 
     chat_id = message.chat.id
     mention = message.from_user.mention if message.from_user else "User"
@@ -463,25 +464,9 @@ async def start_stream_in_vc(client, message):
             f"Duration: {info['duration_min']}\n"
             f"Requested by: {mention}"
         )
-        buttons = InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton("Resume", callback_data=f"PLAYER Resume|{chat_id}"),
-                    InlineKeyboardButton("Pause", callback_data=f"PLAYER Pause|{chat_id}"),
-                    InlineKeyboardButton("Skip", callback_data=f"PLAYER Skip|{chat_id}"),
-                    InlineKeyboardButton("Stop", callback_data=f"PLAYER Stop|{chat_id}"),
-                ],
-                [
-                    InlineKeyboardButton(
-                        "0:00 --------- 0:00",
-                        callback_data=f"PLAYER Progress|{chat_id}",
-                    ),
-                ],
-                [
-                    InlineKeyboardButton("Close", callback_data="close"),
-                ],
-            ]
-        )
+        total_sec = convert_to_seconds(info.get("duration_min", "0:00"))
+        # Same icon panel as Progress callback (no style switch)
+        buttons = player_markup(chat_id, 0, total_sec)
         await aux.delete()
         panel = await message.reply_photo(
             photo=thumb, caption=caption, reply_markup=buttons
