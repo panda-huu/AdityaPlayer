@@ -22,43 +22,38 @@ import tempfile
 import os
 
 
-
-
 def parse_query(query: str) -> str:
     if bool(re.match(r'^(https?://)?(www\.)?(youtube\.com|youtu\.be)/(?:watch\?v=|embed/|v/|shorts/|live/)?([A-Za-z0-9_-]{11})(?:[?&].*)?$', query)):
-        match = re.search(r'(?:v=|\/(?:embed|v|shorts|live)\/|youtu\.be\/)([A-Za-z0-9_-]{11})', query)
+        match = re.search(r'(?:v=|/(?:embed|v|shorts|live)/|youtu\.be/)([A-Za-z0-9_-]{11})', query)
         if match:
             return f"https://www.youtube.com/watch?v={match.group(1)}"
-        
-    return query
 
+    return query
 
 
 def parse_tg_link(link: str):
     parsed = urlparse(link)
     path = parsed.path.strip('/')
     parts = path.split('/')
-    
+
     if len(parts) >= 2:
         return str(parts[0]), int(parts[1])
-        
+
     return None, None
+
 
 async def fetch_song(query: str):
     try:
-        # Step 1: Search video on YouTube
         search = VideosSearch(query, limit=1)
         result = (await search.next()).get("result", [])
 
         if not result:
             return {"error": "No video found"}
 
-        # Step 2: Extract video ID
         vidid = result[0].get("id")
         if not vidid:
             return {"error": "Failed to get video ID"}
 
-        # Step 3: Call API using video ID
         url = "http://46.250.243.52:1470/song"
         params = {"query": vidid}
 
@@ -107,7 +102,6 @@ def format_duration(seconds: int) -> str:
     return " ".join(parts)
 
 
-
 def seconds_to_hhmmss(seconds):
     if seconds < 3600:
         minutes = seconds // 60
@@ -125,7 +119,6 @@ def random_color():
 
 
 def trim_text(draw, text, font, max_width):
-    """Ensure text fits inside max_width, otherwise trim and add '...'"""
     if not text:
         return ""
     original = text
@@ -142,16 +135,14 @@ def trim_text(draw, text, font, max_width):
             text = text[:-1]
         text = text + "..."
     return text
-    
+
 
 async def create_music_thumbnail(cover_path, title, artist, duration_seconds=None, output_path="thumbnail.png"):
-    # Handle title/artist
     if not title or title.strip() == "":
         title = "Unknown Title"
     if not artist or artist.strip() == "":
         artist = "Unknown Artist"
 
-    # Handle time
     if (
         duration_seconds is None
         or duration_seconds == 0
@@ -170,12 +161,10 @@ async def create_music_thumbnail(cover_path, title, artist, duration_seconds=Non
         cur_sec = random.randint(0, 7200)
         current_time = seconds_to_hhmmss(cur_sec)
 
-    # Load cover and background
     cover = Image.open(cover_path).convert("RGBA").resize((500, 500))
     bg = cover.copy().resize((1280, 720))
     bg = bg.filter(ImageFilter.GaussianBlur(25))
 
-    # --- Gradient overlay background ---
     grad_overlay = Image.new("RGBA", bg.size, (0, 0, 0, 0))
     gdraw = ImageDraw.Draw(grad_overlay)
     c1, c2 = random_color(), random_color()
@@ -186,11 +175,9 @@ async def create_music_thumbnail(cover_path, title, artist, duration_seconds=Non
         gdraw.line([(0, i), (bg.width, i)], fill=(r, g, b, 80))
     bg = Image.alpha_composite(bg, grad_overlay)
 
-    # --- Glassmorphic Player Card ---
     card_w, card_h = 700, 380
-    border_thickness = 5  
+    border_thickness = 5
 
-    # gradient for card border
     grad = Image.new("RGBA", (card_w + border_thickness*2, card_h + border_thickness*2), (0,0,0,0))
     gdraw = ImageDraw.Draw(grad)
     c1, c2 = random_color(), random_color()
@@ -221,16 +208,13 @@ async def create_music_thumbnail(cover_path, title, artist, duration_seconds=Non
     card_with_border = border.copy()
     card_with_border.paste(card, (border_thickness, border_thickness), mask_card)
 
-    # position card CENTER
     x = (bg.width - card_with_border.width) // 2
     y = (bg.height - card_with_border.height) // 2
     bg.paste(card_with_border, (x,y), card_with_border)
 
-    # --- Album cover inside card with gradient border ---
     cover_size = 200
-    border_size = 6  # thin border
+    border_size = 6
 
-    # Gradient border for cover
     grad_cover = Image.new("RGBA", (cover_size + border_size*2, cover_size + border_size*2), (0,0,0,0))
     gdraw = ImageDraw.Draw(grad_cover)
     c1, c2 = random_color(), random_color()
@@ -265,7 +249,6 @@ async def create_music_thumbnail(cover_path, title, artist, duration_seconds=Non
     cover_y = y + (card_h - cover_with_border.height)//2 + border_thickness
     bg.paste(cover_with_border, (cover_x, cover_y), cover_with_border)
 
-    # --- Draw texts and progress bar ---
     draw = ImageDraw.Draw(bg)
     font_title = ImageFont.truetype("AdityaHalder/resource/font.ttf", 36)
     font_artist = ImageFont.truetype("AdityaHalder/resource/font.ttf", 28)
@@ -279,7 +262,6 @@ async def create_music_thumbnail(cover_path, title, artist, duration_seconds=Non
     draw.text((text_x, y + 86), title, font=font_title, fill="white")
     draw.text((text_x, y + 146), artist, font=font_artist, fill="white")
 
-    # Progress bar
     progress_x, progress_y = text_x, y + 206
     bar_w, bar_h = 380, 8
     prog_fill = int((cur_sec / tot_sec) * bar_w) if tot_sec else bar_w
@@ -303,48 +285,40 @@ async def create_music_thumbnail(cover_path, title, artist, duration_seconds=Non
     total_x = progress_x + bar_w - (total_bbox[2] - total_bbox[0])
     draw.text((total_x, progress_y + 15), total_time, font=font_time, fill="red" if total_time == "Live" else "white")
 
-    # Controls (with repeat moved before back)
     controls_y = progress_y + 70
     num_icons = 7
     step = bar_w // (num_icons - 1)
     icon_positions = [progress_x + i*step for i in range(num_icons)]
 
-    # shuffle
     shuffle_x = icon_positions[0]
     draw.line([(shuffle_x-12, controls_y-8), (shuffle_x+8, controls_y+12)], fill=(0,255,120), width=3)
     draw.polygon([(shuffle_x+8, controls_y+12), (shuffle_x+16, controls_y+6), (shuffle_x+2, controls_y+4)], fill=(0,255,120))
     draw.line([(shuffle_x-12, controls_y+8), (shuffle_x-2, controls_y-2)], fill=(0,255,120), width=3)
 
-    # repeat (bright yellow)
     repeat_x = icon_positions[1]
     repeat_color = (255, 220, 50)
     draw.arc([repeat_x-14, controls_y-12, repeat_x+14, controls_y+12], start=30, end=300, fill=repeat_color, width=3)
     draw.polygon([(repeat_x+14, controls_y-2), (repeat_x+22, controls_y-6), (repeat_x+14, controls_y-10)], fill=repeat_color)
 
-    # back
     sbx = icon_positions[2]
     draw.polygon([(sbx+10, controls_y-10), (sbx+10, controls_y+10), (sbx-12, controls_y)], fill="white")
     draw.rectangle([sbx+14, controls_y-10, sbx+18, controls_y+10], fill="white")
 
-    # pause
     center_x = icon_positions[3]
     bar_wid, bar_height = 6, 26
     gap = 10
     draw.rectangle([center_x-gap-bar_wid, controls_y-bar_height//2, center_x-gap, controls_y+bar_height//2], fill="white")
     draw.rectangle([center_x+gap, controls_y-bar_height//2, center_x+gap+bar_wid, controls_y+bar_height//2], fill="white")
 
-    # forward
     sfx = icon_positions[4]
     draw.polygon([(sfx-10, controls_y-10), (sfx-10, controls_y+10), (sfx+12, controls_y)], fill="white")
     draw.rectangle([sfx-18, controls_y-10, sfx-14, controls_y+10], fill="white")
 
-    # heart
     fav_x = icon_positions[5]
     heart = [(fav_x, controls_y), (fav_x-10, controls_y-10), (fav_x-20, controls_y), (fav_x, controls_y+14),
              (fav_x+20, controls_y), (fav_x+10, controls_y-10)]
     draw.polygon(heart, fill="red")
 
-    # earphone
     ear_x = icon_positions[6]
     draw.arc([ear_x-20, controls_y-20, ear_x+20, controls_y+20], start=200, end=-20, fill="white", width=3)
     draw.rectangle([ear_x-18, controls_y-4, ear_x-10, controls_y+12], fill="white")
@@ -377,7 +351,7 @@ async def generate_thumbnail(url: str) -> str:
 
         else:
             if not os.path.isfile(url):
-                return "AdityaHalder/rsource/thumbnail.png"
+                return "AdityaHalder/resource/thumbnail.png"
 
             with Image.open(url) as img:
                 img = img.resize((1280, 720))
@@ -391,14 +365,14 @@ async def generate_thumbnail(url: str) -> str:
         return filename
 
     except Exception:
-        return "AdityaHalder/rsource/thumbnail.png"
+        return "AdityaHalder/resource/thumbnail.png"
 
 
 async def make_thumbnail(image, title, channel, duration, output):
     return await create_music_thumbnail(image, title, channel, duration, output)
 
 
-@bot.on_message(cdz(["play", "vplay"]) & \~filters.private))
+@bot.on_message(cdz(["play", "vplay"]) & ~filters.private)
 async def start_stream_in_vc(client, message):
     import traceback
     import time
@@ -416,20 +390,20 @@ async def start_stream_in_vc(client, message):
         pass
 
     if len(message.command) < 2:
-        return await message.reply_text(f"❗Usage: `/{message.command[0]} <song name>`")
+        return await message.reply_text(f"Usage: /{message.command[0]} <song name>")
 
     query = " ".join(message.command[1:])
-    aux = await message.reply_text("🔍 Searching...")
+    aux = await message.reply_text("Searching...")
 
     try:
         info = await Youtube.search(query)
     except Exception as e:
-        return await aux.edit(f"❌ Search error: `{e}`")
+        return await aux.edit(f"Search error: {e}")
 
     if not info:
-        return await aux.edit("❌ Song not found.")
+        return await aux.edit("Song not found.")
 
-    await aux.edit(f"⬇️ Downloading **{info['title']}**...")
+    await aux.edit(f"Downloading {info['title']}...")
 
     try:
         if is_video:
@@ -437,12 +411,12 @@ async def start_stream_in_vc(client, message):
         else:
             file_path = await Youtube.download_song(info["vidid"])
     except Exception as e:
-        return await aux.edit(f"❌ Download error: `{e}`")
+        return await aux.edit(f"Download error: {e}")
 
     if not file_path:
-        return await aux.edit("❌ Download failed — API se file nahi mili.")
+        return await aux.edit("Download failed - API se file nahi mili.")
 
-    await aux.edit("🎶 Starting Voice Chat stream...")
+    await aux.edit("Starting Voice Chat stream...")
 
     try:
         media_stream = MediaStream(
@@ -457,7 +431,6 @@ async def start_stream_in_vc(client, message):
         except Exception:
             pass
 
-        # Queue clear + add current song
         call.queue[chat_id] = []
         await call.add_to_queue(
             chat_id,
@@ -467,48 +440,45 @@ async def start_stream_in_vc(client, message):
             info.get("thumbnail", ""),
             mention,
         )
-        # Track start time for progress bar
         if not hasattr(call, "start_times"):
             call.start_times = {}
         call.start_times[chat_id] = time.time()
-        call.stream_on(chat_id) if hasattr(call, "stream_on") else None
         try:
             await call.stream_on(chat_id)
         except Exception:
             call.paused[chat_id] = False
 
         await call.start_stream(chat_id, media_stream)
-        await aux.edit(f"✅ **Now Playing:** `{info['title']}`")
+        await aux.edit(f"Now Playing: {info['title']}")
 
     except Exception as e:
         tb = traceback.format_exc()
-        return await aux.edit(f"❌ Failed to start stream: `{e}`\n\n<code>{tb[-500:]}</code>")
+        return await aux.edit(f"Failed to start stream: {e}\n\n{tb[-500:]}")
 
-    # Player panel buttons (PANDAMUSIC style)
     try:
         thumb = await generate_thumbnail(info["thumbnail"])
         caption = (
-            f"🎵 **Streaming in VC**\n\n"
-            f"**Title:** `{info['title']}`\n"
-            f"**Duration:** {info['duration_min']}\n"
-            f"**Requested by:** {mention}"
+            f"Streaming in VC\n\n"
+            f"Title: {info['title']}\n"
+            f"Duration: {info['duration_min']}\n"
+            f"Requested by: {mention}"
         )
         buttons = InlineKeyboardMarkup(
             [
                 [
-                    InlineKeyboardButton("▷", callback_data=f"PLAYER Resume|{chat_id}"),
-                    InlineKeyboardButton("II", callback_data=f"PLAYER Pause|{chat_id}"),
-                    InlineKeyboardButton("‣‣I", callback_data=f"PLAYER Skip|{chat_id}"),
-                    InlineKeyboardButton("▢", callback_data=f"PLAYER Stop|{chat_id}"),
+                    InlineKeyboardButton("Resume", callback_data=f"PLAYER Resume|{chat_id}"),
+                    InlineKeyboardButton("Pause", callback_data=f"PLAYER Pause|{chat_id}"),
+                    InlineKeyboardButton("Skip", callback_data=f"PLAYER Skip|{chat_id}"),
+                    InlineKeyboardButton("Stop", callback_data=f"PLAYER Stop|{chat_id}"),
                 ],
                 [
                     InlineKeyboardButton(
-                        "0:00 ───────── 0:00",
+                        "0:00 --------- 0:00",
                         callback_data=f"PLAYER Progress|{chat_id}",
                     ),
                 ],
                 [
-                    InlineKeyboardButton("🗑️ Close", callback_data="close"),
+                    InlineKeyboardButton("Close", callback_data="close"),
                 ],
             ]
         )
@@ -516,7 +486,6 @@ async def start_stream_in_vc(client, message):
         panel = await message.reply_photo(
             photo=thumb, caption=caption, reply_markup=buttons
         )
-        # Save panel message for later edits
         if chat_id in call.queue and call.queue[chat_id]:
             call.queue[chat_id][0]["panel"] = panel
     except Exception as e:
