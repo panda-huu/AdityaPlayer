@@ -4,7 +4,25 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from .. import bot, call, rgx
 
+try:
+    from pyrogram.enums import ButtonStyle
+
+    _HAS_STYLE = True
+except Exception:
+    ButtonStyle = None
+    _HAS_STYLE = False
+
 _progress_tasks = {}
+
+
+def _btn(text: str, callback_data: str, style=None) -> InlineKeyboardButton:
+    """InlineKeyboardButton with optional color style (Kurigram / Bot API 9.4+)."""
+    if _HAS_STYLE and style is not None:
+        try:
+            return InlineKeyboardButton(text, callback_data=callback_data, style=style)
+        except TypeError:
+            pass
+    return InlineKeyboardButton(text, callback_data=callback_data)
 
 
 def _fmt(seconds: int) -> str:
@@ -36,33 +54,41 @@ def _progress_bar(elapsed: int, total: int, width: int = 9) -> str:
 
 def player_markup(chat_id: int, elapsed: int = 0, total: int = 0) -> InlineKeyboardMarkup:
     bar = _progress_bar(elapsed, total)
+    primary = ButtonStyle.PRIMARY if _HAS_STYLE else None
+    success = ButtonStyle.SUCCESS if _HAS_STYLE else None
+    danger = ButtonStyle.DANGER if _HAS_STYLE else None
+
     return InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("▷", callback_data=f"PLAYER Resume|{chat_id}"),
-                InlineKeyboardButton("II", callback_data=f"PLAYER Pause|{chat_id}"),
-                InlineKeyboardButton("‣‣I", callback_data=f"PLAYER Skip|{chat_id}"),
-                InlineKeyboardButton("▢", callback_data=f"PLAYER Stop|{chat_id}"),
+                _btn("▷", f"PLAYER Resume|{chat_id}", primary),      # blue
+                _btn("II", f"PLAYER Pause|{chat_id}", success),       # green
+                _btn("‣‣I", f"PLAYER Skip|{chat_id}", primary),       # blue
+                _btn("▢", f"PLAYER Stop|{chat_id}", danger),          # red
             ],
             [
-                InlineKeyboardButton(bar, callback_data=f"PLAYER Progress|{chat_id}"),
+                _btn(bar, f"PLAYER Progress|{chat_id}", success),     # green
             ],
             [
-                InlineKeyboardButton("🗑 Close", callback_data="close"),
+                _btn("🗑 Close", "close", danger),                     # red
             ],
         ]
     )
 
 
 def queue_markup(chat_id: int, index: int) -> InlineKeyboardMarkup:
+    primary = ButtonStyle.PRIMARY if _HAS_STYLE else None
+    success = ButtonStyle.SUCCESS if _HAS_STYLE else None
+    danger = ButtonStyle.DANGER if _HAS_STYLE else None
+
     return InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("▷ Play Now", callback_data=f"QUEUE Play|{chat_id}|{index}"),
-                InlineKeyboardButton("‣‣I Skip", callback_data=f"PLAYER Skip|{chat_id}"),
+                _btn("▷ Play Now", f"QUEUE Play|{chat_id}|{index}", primary),
+                _btn("‣‣I Skip", f"PLAYER Skip|{chat_id}", success),
             ],
             [
-                InlineKeyboardButton("🗑 Close", callback_data="close"),
+                _btn("🗑 Close", "close", danger),
             ],
         ]
     )
@@ -82,7 +108,6 @@ def _get_progress(chat_id: int):
     title = str(item.get("title", "Unknown"))[:30]
     total = _parse_duration(item.get("duration", "0:00"))
     start = getattr(call, "start_times", {}).get(chat_id)
-    # Pause support: freeze elapsed while paused
     if await_paused(chat_id):
         played = item.get("played", 0)
         elapsed = int(played)
@@ -99,7 +124,6 @@ def await_paused(chat_id: int) -> bool:
 
 
 async def _progress_loop(chat_id: int):
-    """Auto-update progress button every 8 seconds."""
     while True:
         await asyncio.sleep(8)
         try:
@@ -209,7 +233,6 @@ async def player_panel_cb(client, query):
         try:
             await call.pause_stream(chat_id)
             await call.stream_off(chat_id)
-            # freeze played time
             queued = call.queue.get(chat_id) or []
             if queued:
                 start = getattr(call, "start_times", {}).get(chat_id)
@@ -223,7 +246,6 @@ async def player_panel_cb(client, query):
         try:
             await call.resume_stream(chat_id)
             await call.stream_on(chat_id)
-            # continue from frozen played
             queued = call.queue.get(chat_id) or []
             played = int(queued[0].get("played", 0)) if queued else 0
             if not hasattr(call, "start_times"):
