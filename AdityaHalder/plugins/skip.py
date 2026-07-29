@@ -4,7 +4,7 @@ from .. import bot, call, cdx
 from ..modules.helpers import AdminsOnlyWrapper
 
 
-@bot.on_message(cdx("skip") & \~filters.private)
+@bot.on_message(cdx("skip") & \~filters.private))
 @AdminsOnlyWrapper
 async def skip_vc_stream(client, message):
     chat_id = message.chat.id
