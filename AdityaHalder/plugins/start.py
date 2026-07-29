@@ -1,14 +1,75 @@
 import random
 
-from .. import bot, cdx, rgx, console
+from .. import bot, cdz, rgx, console
 from ..modules.database import add_served_user
 
 from pyrogram import filters
-from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup 
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+try:
+    from pyrogram.enums import ButtonStyle
+
+    _PRIMARY = ButtonStyle.PRIMARY
+    _SUCCESS = ButtonStyle.SUCCESS
+    _DANGER = ButtonStyle.DANGER
+    _HAS_STYLE = True
+except Exception:
+    _PRIMARY = "primary"
+    _SUCCESS = "success"
+    _DANGER = "danger"
+    _HAS_STYLE = False
 
 
+def _btn(text: str, style=None, **kwargs) -> InlineKeyboardButton:
+    if style is not None:
+        try:
+            return InlineKeyboardButton(text, style=style, **kwargs)
+        except TypeError:
+            pass
+        try:
+            return InlineKeyboardButton(
+                text, style=str(getattr(style, "name", style)).lower(), **kwargs
+            )
+        except TypeError:
+            pass
+    return InlineKeyboardButton(text, **kwargs)
 
-@bot.on_message(cdx(["start", "help"]))
+
+def start_markup(username: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [
+                _btn(
+                    "➕ Add Me To Your Group 💬",
+                    _PRIMARY,
+                    url=f"https://t.me/{username}?startgroup=true",
+                ),
+            ],
+            [
+                _btn("📝 Open Command Menu ⚡", _SUCCESS, callback_data="help_menu"),
+            ],
+        ]
+    )
+
+
+def help_markup(username: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [
+                _btn(
+                    "➕ Add Me To Your Group 💬",
+                    _PRIMARY,
+                    url=f"https://t.me/{username}?startgroup=true",
+                ),
+            ],
+            [
+                _btn("🔙 Go Back To Main Menu ✨", _DANGER, callback_data="home_menu"),
+            ],
+        ]
+    )
+
+
+@bot.on_message(cdz(["start", "help"]))
 async def start_message_private(client, message):
     await add_served_user(message.from_user.id)
     mention = message.from_user.mention
@@ -40,22 +101,7 @@ menu** for all my features.""",
     ]
     photo = console.START_IMAGE_URL
     caption = random.choice(start_messages)
-    buttons = InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton(
-                        text="➕ Add Me To Your Group 💬",
-                        url=f"https://t.me/{client.me.username}?startgroup=true",
-                    ),
-                ],
-                [
-                    InlineKeyboardButton(
-                        text="📝 Open Command Menu ⚡",
-                        callback_data="help_menu",
-                    ),
-                ]
-            ]
-    )
+    buttons = start_markup(client.me.username)
     await message.reply_photo(photo=photo, caption=caption, reply_markup=buttons)
     full_name = message.from_user.first_name + " " + (message.from_user.last_name or "")
     username = f"@{message.from_user.username}" if message.from_user.username else "N/A"
@@ -66,8 +112,9 @@ menu** for all my features.""",
 🧑 **Full Name:** {full_name}
 🔗 **Username:** {username}
 🆔 **Telegram ID:** `{user_id}`"""
-    await client.send_message(console.LOG_GROUP_ID, text=log_message, disable_web_page_preview=True)
-
+    await client.send_message(
+        console.LOG_GROUP_ID, text=log_message, disable_web_page_preview=True
+    )
 
 
 @bot.on_callback_query(rgx("help_menu"))
@@ -93,25 +140,8 @@ the queue.
 
 💡 **Tip:** You can use /play with a song
 name or link for best results!"""
-    buttons = InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton(
-                        text="➕ Add Me To Your Group 💬",
-                        url=f"https://t.me/{client.me.username}?startgroup=true",
-                    ),
-                ],
-                [
-                    InlineKeyboardButton(
-                        text="🔙 Go Back To Main Menu ✨",
-                        callback_data="home_menu",
-                    ),
-                ]
-            ]
-    )
+    buttons = help_markup(client.me.username)
     await query.message.edit(help_text, reply_markup=buttons)
-
-
 
 
 @bot.on_callback_query(rgx("home_menu"))
@@ -144,29 +174,5 @@ me to your group!
 menu** for all my features.""",
     ]
     caption = random.choice(start_messages)
-    buttons = InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton(
-                        text="➕ Add Me To Your Group 💬",
-                        url=f"https://t.me/{client.me.username}?startgroup=true",
-                    ),
-                ],
-                [
-                    InlineKeyboardButton(
-                        text="📝 Open Command Menu ⚡",
-                        callback_data="help_menu",
-                    ),
-                ]
-            ]
-    )
+    buttons = start_markup(client.me.username)
     await query.message.edit(caption, reply_markup=buttons)
-
-
-
-
-
-
-
-
-
