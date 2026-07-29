@@ -4,9 +4,10 @@ import time
 from .. import console
 from .database import get_assistant, group_assistant
 from .helpers import AssistantErr
+from .formatters import panel_caption
 
 from pyrogram import Client, errors
-from pyrogram.enums import ChatMemberStatus
+from pyrogram.enums import ChatMemberStatus, ParseMode
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from pytgcalls import PyTgCalls, filters as fl
@@ -28,7 +29,7 @@ class Bot(Client):
         )
 
     async def start(self):
-        console.logs(__name__).info(f"Starting Bot ...")
+        console.logs(__name__).info("Starting Bot ...")
         await super().start()
         get_me = await self.get_me()
         if get_me.last_name:
@@ -42,14 +43,14 @@ class Bot(Client):
             await self.send_message(console.LOG_GROUP_ID, "**Bot Started.**")
         except Exception:
             console.logs(__name__).error(
-                "Bot has failed to access the log Group. Make sure that you have added your bot to your log group and promoted as admin!"
+                "Bot has failed to access the log Group."
             )
             sys.exit()
         try:
             a = await self.get_chat_member(console.LOG_GROUP_ID, self.id)
         except Exception:
             console.logs(__name__).error(
-                "Bot has failed to access the log Group. Make sure that you have added your bot to your log group and promoted as admin!"
+                "Bot has failed to access the log Group."
             )
             sys.exit()
         if a.status != ChatMemberStatus.ADMINISTRATOR:
@@ -100,146 +101,45 @@ class App(Client):
 
     async def start(self):
         console.logs(__name__).info("Starting Assistant Clients")
-        if console.STRING1:
-            await self.one.start()
+        clients = [
+            (console.STRING1, self.one, 1),
+            (console.STRING2, self.two, 2),
+            (console.STRING3, self.three, 3),
+            (console.STRING4, self.four, 4),
+            (console.STRING5, self.five, 5),
+        ]
+        for string, client, num in clients:
+            if not string:
+                continue
+            await client.start()
             try:
-                await self.one.join_chat("AdityaServer")
-                await self.one.join_chat("AdityaDiscus")
+                await client.join_chat("AdityaServer")
+                await client.join_chat("AdityaDiscus")
             except Exception:
                 pass
-            assistants.append(1)
+            assistants.append(num)
             try:
-                await self.one.send_message(
-                    console.LOG_GROUP_ID, "**Assistant (1) Started.**"
+                await client.send_message(
+                    console.LOG_GROUP_ID, f"**Assistant ({num}) Started.**"
                 )
             except Exception:
                 console.logs(__name__).error(
-                    "Assistant account 1 has failed to access the log group."
+                    f"Assistant account {num} has failed to access the log group."
                 )
                 sys.exit()
-            get_me = await self.one.get_me()
-            self.one.name = (
+            get_me = await client.get_me()
+            client.name = (
                 (get_me.first_name + " " + get_me.last_name)
                 if get_me.last_name
                 else get_me.first_name
             )
-            self.one.username = get_me.username
-            self.one.mention = get_me.mention
-            self.one.id = get_me.id
+            client.username = get_me.username
+            client.mention = get_me.mention
+            client.id = get_me.id
             assistantids.append(get_me.id)
-            console.logs(__name__).info(f"Assistant (1) started as - {self.one.name}")
-        if console.STRING2:
-            await self.two.start()
-            try:
-                await self.two.join_chat("AdityaServer")
-                await self.two.join_chat("AdityaDiscus")
-            except Exception:
-                pass
-            assistants.append(2)
-            try:
-                await self.two.send_message(
-                    console.LOG_GROUP_ID, "**Assistant (2) Started.**"
-                )
-            except Exception:
-                console.logs(__name__).error(
-                    "Assistant account 2 has failed to access the log group."
-                )
-                sys.exit()
-            get_me = await self.two.get_me()
-            self.two.name = (
-                (get_me.first_name + " " + get_me.last_name)
-                if get_me.last_name
-                else get_me.first_name
+            console.logs(__name__).info(
+                f"Assistant ({num}) started as - {client.name}"
             )
-            self.two.username = get_me.username
-            self.two.mention = get_me.mention
-            self.two.id = get_me.id
-            assistantids.append(get_me.id)
-            console.logs(__name__).info(f"Assistant (2) started as - {self.two.name}")
-        if console.STRING3:
-            await self.three.start()
-            try:
-                await self.three.join_chat("AdityaServer")
-                await self.three.join_chat("AdityaDiscus")
-            except Exception:
-                pass
-            assistants.append(3)
-            try:
-                await self.three.send_message(
-                    console.LOG_GROUP_ID, "**Assistant (3) Started.**"
-                )
-            except Exception:
-                console.logs(__name__).error(
-                    "Assistant account 3 has failed to access the log group."
-                )
-                sys.exit()
-            get_me = await self.three.get_me()
-            self.three.name = (
-                (get_me.first_name + " " + get_me.last_name)
-                if get_me.last_name
-                else get_me.first_name
-            )
-            self.three.username = get_me.username
-            self.three.mention = get_me.mention
-            self.three.id = get_me.id
-            assistantids.append(get_me.id)
-            console.logs(__name__).info(f"Assistant (3) started as - {self.three.name}")
-        if console.STRING4:
-            await self.four.start()
-            try:
-                await self.four.join_chat("AdityaServer")
-                await self.four.join_chat("AdityaDiscus")
-            except Exception:
-                pass
-            assistants.append(4)
-            try:
-                await self.four.send_message(
-                    console.LOG_GROUP_ID, "**Assistant (4) Started.**"
-                )
-            except Exception:
-                console.logs(__name__).error(
-                    "Assistant (4) account has failed to access the log group."
-                )
-                sys.exit()
-            get_me = await self.four.get_me()
-            self.four.name = (
-                (get_me.first_name + " " + get_me.last_name)
-                if get_me.last_name
-                else get_me.first_name
-            )
-            self.four.username = get_me.username
-            self.four.mention = get_me.mention
-            self.four.id = get_me.id
-            assistantids.append(get_me.id)
-            console.logs(__name__).info(f"Assistant (4) started as - {self.four.name}")
-        if console.STRING5:
-            await self.five.start()
-            try:
-                await self.five.join_chat("AdityaServer")
-                await self.five.join_chat("AdityaDiscus")
-            except Exception:
-                pass
-            assistants.append(5)
-            try:
-                await self.five.send_message(
-                    console.LOG_GROUP_ID, "**Assistant (5) Started.**"
-                )
-            except Exception:
-                console.logs(__name__).error(
-                    "Assistant (5) account has failed to access the log group."
-                )
-                sys.exit()
-            get_me = await self.five.get_me()
-            self.five.name = (
-                (get_me.first_name + " " + get_me.last_name)
-                if get_me.last_name
-                else get_me.first_name
-            )
-            self.five.username = get_me.username
-            self.five.mention = get_me.mention
-            self.five.id = get_me.id
-            assistantids.append(get_me.id)
-            console.logs(__name__).info(f"Assistant (5) started as - {self.five.name}")
 
 
 class Call(PyTgCalls):
@@ -360,11 +260,11 @@ class Call(PyTgCalls):
         mention = queued[0].get("requested_by") or "User"
         total_sec = _parse_duration(duration)
 
-        caption = (
-            f"**Started Streaming On VC.**\n\n"
-            f"**Title:** {title}\n"
-            f"**Duration:** {duration}\n"
-            f"**Requested By:** {mention}"
+        caption = panel_caption(
+            title,
+            duration,
+            mention,
+            header="sᴛᴀʀᴛᴇᴅ sᴛʀᴇᴀᴍɪɴɢ ᴏɴ ᴠᴄ",
         )
         buttons = player_markup(chat_id, 0, total_sec)
 
@@ -380,14 +280,21 @@ class Call(PyTgCalls):
                     photo=thumbnail,
                     caption=caption,
                     reply_markup=buttons,
+                    parse_mode=ParseMode.HTML,
                 )
             else:
                 panel = await bot.send_message(
-                    chat_id, caption, reply_markup=buttons
+                    chat_id,
+                    caption,
+                    reply_markup=buttons,
+                    parse_mode=ParseMode.HTML,
                 )
         except Exception:
             panel = await bot.send_message(
-                chat_id, caption, reply_markup=buttons
+                chat_id,
+                caption,
+                reply_markup=buttons,
+                parse_mode=ParseMode.HTML,
             )
 
         queued[0]["panel"] = panel
