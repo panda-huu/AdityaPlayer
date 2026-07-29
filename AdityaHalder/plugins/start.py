@@ -8,7 +8,7 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 
 
-@bot.on_message(cdx(["start", "help"]) & ~filters.private)
+@bot.on_message(cdx(["start", "help"]))
 async def start_message_private(client, message):
     await add_served_user(message.from_user.id)
     mention = message.from_user.mention
