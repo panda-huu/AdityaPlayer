@@ -62,6 +62,12 @@ ABUSE_COMMANDS = [
     ("noabuse", "/noabuse"),
 ]
 
+WELCOME_COMMANDS = [
+    ("welcome", "/welcome"),
+    ("setwelcome", "/setwelcome"),
+    ("resetwelcome", "/resetwelcome"),
+]
+
 CMD_USAGE = {
     "play": (
         f"{smallcaps('command')}: /play\n\n"
@@ -170,6 +176,33 @@ CMD_USAGE = {
         f"{smallcaps('auto deletes abusive messages in group.')}\n"
         f"{smallcaps('admin only. bot needs delete messages right.')}"
     ),
+    "welcome": (
+        f"{smallcaps('command')}: /welcome\n\n"
+        f"{smallcaps('use')}:\n"
+        f"• /welcome on\n"
+        f"• /welcome off\n\n"
+        f"{smallcaps('enable or disable welcome messages.')}\n"
+        f"{smallcaps('admin only.')}"
+    ),
+    "setwelcome": (
+        f"{smallcaps('command')}: /setwelcome\n\n"
+        f"{smallcaps('use')}:\n"
+        f"• /setwelcome {smallcaps('text')}\n"
+        f"• {smallcaps('reply to photo/video with')} /setwelcome\n"
+        f"• {smallcaps('reply to text with')} /setwelcome\n\n"
+        f"{smallcaps('placeholders')}:\n"
+        f"{{name}} {{fullname}} {{id}} {{mention}} {{username}} {{chat}}\n\n"
+        f"{smallcaps('button format')}:\n"
+        f"[Button Text](buttonurl:https://t.me/example)\n\n"
+        f"{smallcaps('sets custom welcome message with optional photo/video and buttons.')}\n"
+        f"{smallcaps('admin only.')}"
+    ),
+    "resetwelcome": (
+        f"{smallcaps('command')}: /resetwelcome\n\n"
+        f"{smallcaps('use')}: /resetwelcome\n\n"
+        f"{smallcaps('resets welcome message to default.')}\n"
+        f"{smallcaps('admin only.')}"
+    ),
 }
 
 
@@ -260,6 +293,7 @@ def help_menu_markup() -> InlineKeyboardMarkup:
     rows.append(
         [
             _btn(smallcaps("abuse"), _DANGER, callback_data="abuse_menu"),
+            _btn(smallcaps("welcome"), _SUCCESS, callback_data="welcome_menu"),
         ]
     )
     rows.append(
@@ -318,6 +352,24 @@ def abuse_menu_markup() -> InlineKeyboardMarkup:
     )
 
 
+def welcome_menu_markup() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [
+                _btn(smallcaps("welcome"), _PRIMARY, callback_data="cmdhelp|welcome"),
+                _btn(smallcaps("setwelcome"), _SUCCESS, callback_data="cmdhelp|setwelcome"),
+            ],
+            [
+                _btn(smallcaps("resetwelcome"), _DANGER, callback_data="cmdhelp|resetwelcome"),
+            ],
+            [
+                _btn(smallcaps("📋 commands"), _SUCCESS, callback_data="help_menu"),
+                _btn(smallcaps("🔙 start"), _DANGER, callback_data="home_menu"),
+            ],
+        ]
+    )
+
+
 def cmd_help_markup() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
@@ -353,7 +405,8 @@ def help_list_caption() -> str:
         f"{smallcaps('tap any command button below to see how to use it.')}\n"
         f"{smallcaps('action = mute ban kick etc.')}\n"
         f"{smallcaps('chatbot = chaton chatoff')}\n"
-        f"{smallcaps('abuse = noabuse filter')}"
+        f"{smallcaps('abuse = noabuse filter')}\n"
+        f"{smallcaps('welcome = setwelcome resetwelcome')}"
     )
     return f"<blockquote expandable>{body}</blockquote>"
 
@@ -381,6 +434,16 @@ def abuse_list_caption() -> str:
         f"{smallcaps('abuse filter')}\n\n"
         f"{smallcaps('auto delete bad words in group.')}\n"
         f"{smallcaps('tap noabuse to see usage.')}"
+    )
+    return f"<blockquote expandable>{body}</blockquote>"
+
+
+def welcome_list_caption() -> str:
+    body = (
+        f"{smallcaps('welcome commands')}\n\n"
+        f"{smallcaps('set custom welcome messages for new members.')}\n"
+        f"{smallcaps('supports text, photo, video and buttons.')}\n"
+        f"{smallcaps('tap a button to see usage.')}"
     )
     return f"<blockquote expandable>{body}</blockquote>"
 
@@ -537,6 +600,14 @@ async def abuse_menu_cb(client, query):
     if await block_cb_if_maintenance(query):
         return
     await _edit_menu(query, abuse_list_caption(), abuse_menu_markup())
+    await query.answer()
+
+
+@bot.on_callback_query(rgx("welcome_menu"))
+async def welcome_menu_cb(client, query):
+    if await block_cb_if_maintenance(query):
+        return
+    await _edit_menu(query, welcome_list_caption(), welcome_menu_markup())
     await query.answer()
 
 
