@@ -45,6 +45,19 @@ HELP_COMMANDS = [
     ("broadcast", "/broadcast"),
 ]
 
+ACTION_COMMANDS = [
+    ("mute", "/mute"),
+    ("unmute", "/unmute"),
+    ("ban", "/ban"),
+    ("unban", "/unban"),
+    ("kick", "/kick"),
+]
+
+CHATBOT_COMMANDS = [
+    ("chaton", "/chaton"),
+    ("chatoff", "/chatoff"),
+]
+
 CMD_USAGE = {
     "play": (
         f"{smallcaps('command')}: /play\n\n"
@@ -96,6 +109,54 @@ CMD_USAGE = {
         f"{smallcaps('command')}: /broadcast\n\n"
         f"{smallcaps('use')}: /broadcast {smallcaps('message')}\n\n"
         f"{smallcaps('broadcasts message to served users/chats. (owner only)')}"
+    ),
+    "mute": (
+        f"{smallcaps('command')}: /mute\n\n"
+        f"{smallcaps('use')}:\n"
+        f"• {smallcaps('reply to user')}: /mute {smallcaps('reason')}\n"
+        f"• /mute @user {smallcaps('reason')}\n\n"
+        f"{smallcaps('mutes a user in the group. (admin only)')}"
+    ),
+    "unmute": (
+        f"{smallcaps('command')}: /unmute\n\n"
+        f"{smallcaps('use')}:\n"
+        f"• {smallcaps('reply to user')}: /unmute\n"
+        f"• /unmute @user\n\n"
+        f"{smallcaps('unmutes a user in the group. (admin only)')}"
+    ),
+    "ban": (
+        f"{smallcaps('command')}: /ban\n\n"
+        f"{smallcaps('use')}:\n"
+        f"• {smallcaps('reply to user')}: /ban {smallcaps('reason')}\n"
+        f"• /ban @user {smallcaps('reason')}\n\n"
+        f"{smallcaps('bans a user from the group. (admin only)')}"
+    ),
+    "unban": (
+        f"{smallcaps('command')}: /unban\n\n"
+        f"{smallcaps('use')}:\n"
+        f"• {smallcaps('reply to user')}: /unban\n"
+        f"• /unban @user\n\n"
+        f"{smallcaps('unbans a user in the group. (admin only)')}"
+    ),
+    "kick": (
+        f"{smallcaps('command')}: /kick\n\n"
+        f"{smallcaps('use')}:\n"
+        f"• {smallcaps('reply to user')}: /kick {smallcaps('reason')}\n"
+        f"• /kick @user {smallcaps('reason')}\n\n"
+        f"{smallcaps('kicks a user from the group. (admin only)')}"
+    ),
+    "chaton": (
+        f"{smallcaps('command')}: /chaton\n\n"
+        f"{smallcaps('use')}: /chaton\n\n"
+        f"{smallcaps('enables chatbot in this chat.')}\n"
+        f"{smallcaps('group: admin only. private: anyone.')}\n"
+        f"{smallcaps('then mention bot or say its name to chat.')}"
+    ),
+    "chatoff": (
+        f"{smallcaps('command')}: /chatoff\n\n"
+        f"{smallcaps('use')}: /chatoff\n\n"
+        f"{smallcaps('disables chatbot in this chat.')}\n"
+        f"{smallcaps('group: admin only.')}"
     ),
 }
 
@@ -177,9 +238,52 @@ def help_menu_markup() -> InlineKeyboardMarkup:
             row = []
     if row:
         rows.append(row)
+
+    # Extra category buttons
+    rows.append(
+        [
+            _btn(smallcaps("action"), _DANGER, callback_data="action_menu"),
+            _btn(smallcaps("chatbot"), _SUCCESS, callback_data="chatbot_menu"),
+        ]
+    )
     rows.append(
         [_btn(smallcaps("🔙 back"), _DANGER, callback_data="home_menu")]
     )
+    return InlineKeyboardMarkup(rows)
+
+
+def action_menu_markup() -> InlineKeyboardMarkup:
+    rows = []
+    row = []
+    styles = [_PRIMARY, _SUCCESS, _DANGER]
+    for i, (key, _label) in enumerate(ACTION_COMMANDS):
+        style = styles[i % 3]
+        row.append(_btn(smallcaps(key), style, callback_data=f"cmdhelp|{key}"))
+        if len(row) == 3:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    rows.append(
+        [
+            _btn(smallcaps("📋 commands"), _SUCCESS, callback_data="help_menu"),
+            _btn(smallcaps("🔙 start"), _DANGER, callback_data="home_menu"),
+        ]
+    )
+    return InlineKeyboardMarkup(rows)
+
+
+def chatbot_menu_markup() -> InlineKeyboardMarkup:
+    rows = [
+        [
+            _btn(smallcaps("chaton"), _SUCCESS, callback_data="cmdhelp|chaton"),
+            _btn(smallcaps("chatoff"), _DANGER, callback_data="cmdhelp|chatoff"),
+        ],
+        [
+            _btn(smallcaps("📋 commands"), _SUCCESS, callback_data="help_menu"),
+            _btn(smallcaps("🔙 start"), _DANGER, callback_data="home_menu"),
+        ],
+    ]
     return InlineKeyboardMarkup(rows)
 
 
@@ -215,7 +319,27 @@ def start_caption(mention: str) -> str:
 def help_list_caption() -> str:
     body = (
         f"{smallcaps('help menu')}\n\n"
-        f"{smallcaps('tap any command button below to see how to use it.')}"
+        f"{smallcaps('tap any command button below to see how to use it.')}\n"
+        f"{smallcaps('action = mute ban kick etc.')}\n"
+        f"{smallcaps('chatbot = chaton chatoff')}"
+    )
+    return f"<blockquote expandable>{body}</blockquote>"
+
+
+def action_list_caption() -> str:
+    body = (
+        f"{smallcaps('action commands')}\n\n"
+        f"{smallcaps('moderation tools for group admins.')}\n"
+        f"{smallcaps('tap a button to see usage.')}"
+    )
+    return f"<blockquote expandable>{body}</blockquote>"
+
+
+def chatbot_list_caption() -> str:
+    body = (
+        f"{smallcaps('chatbot commands')}\n\n"
+        f"{smallcaps('enable or disable ai chat in this chat.')}\n"
+        f"{smallcaps('tap a button to see usage.')}"
     )
     return f"<blockquote expandable>{body}</blockquote>"
 
@@ -252,7 +376,6 @@ async def _edit_menu(query, caption: str, markup: InlineKeyboardMarkup):
 
 @bot.on_message(cdx(["start", "help"]))
 async def start_message_private(client, message):
-    # Hard block non-owner during maintenance
     if await block_if_maintenance(message):
         return
 
@@ -349,6 +472,22 @@ async def help_menu_cb(client, query):
     if await block_cb_if_maintenance(query):
         return
     await _edit_menu(query, help_list_caption(), help_menu_markup())
+    await query.answer()
+
+
+@bot.on_callback_query(rgx("action_menu"))
+async def action_menu_cb(client, query):
+    if await block_cb_if_maintenance(query):
+        return
+    await _edit_menu(query, action_list_caption(), action_menu_markup())
+    await query.answer()
+
+
+@bot.on_callback_query(rgx("chatbot_menu"))
+async def chatbot_menu_cb(client, query):
+    if await block_cb_if_maintenance(query):
+        return
+    await _edit_menu(query, chatbot_list_caption(), chatbot_menu_markup())
     await query.answer()
 
 
