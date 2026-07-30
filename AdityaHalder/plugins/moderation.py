@@ -119,7 +119,12 @@ async def moderation_cmds(client, msg: Message):
 
     print(f"[moderation] CMD /{cmd} in {chat_id} from {getattr(msg.from_user, 'id', None)}", flush=True)
 
-    # Always acknowledge first so user knows bot received it
+    # Delete the command message first, then bot replies
+    try:
+        await msg.delete()
+    except Exception:
+        pass
+
     if not msg.from_user:
         return await send(client, chat_id, "❌ Anonymous admins cannot use this.")
 
