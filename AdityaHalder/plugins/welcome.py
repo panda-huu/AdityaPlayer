@@ -41,8 +41,9 @@ DEFAULT_TEXT = (
 # Lenient: doesn't require "http(s)://" up front, so a typo'd URL (missing
 # "://", stray space around the colon, etc.) still gets captured as a button
 # instead of being left behind as broken raw text in the message.
+# Closing ) is now optional so missing parenthesis still works.
 _BTN_RE = re.compile(
-    r"\[([^\]]+)\]\(\s*button\s*url\s*:\s*([^\s\)]+)\)",
+    r"\[([^\]]+)\]\(\s*button\s*url\s*:\s*([^\s\)]+)\)?",
     re.IGNORECASE,
 )
 
@@ -137,12 +138,9 @@ def parse_buttons(text: str):
 
 
 def build_markup(buttons: list):
+    # Only show the buttons that were actually set by the user.
+    # No more forced "• Updates •" fallback button.
     if not buttons:
-        channel = (getattr(console, "SUPPORT_CHANNEL", "") or "").lstrip("@")
-        if channel:
-            return InlineKeyboardMarkup(
-                [[InlineKeyboardButton("• Updates •", url=f"https://t.me/{channel}")]]
-            )
         return None
 
     rows = []
