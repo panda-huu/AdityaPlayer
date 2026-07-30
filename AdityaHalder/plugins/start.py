@@ -1,6 +1,7 @@
 from .. import bot, cdx, rgx, console
 from ..modules.database import add_served_user
 from ..modules.formatters import smallcaps
+from .maintenance import block_if_maintenance, block_cb_if_maintenance
 
 from pyrogram.enums import ParseMode
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
@@ -100,19 +101,10 @@ CMD_USAGE = {
 
 
 def start_markup(bot_username: str) -> InlineKeyboardMarkup:
-    """
-    Layout (screenshot style):
-      [ ADD ME IN YOUR GROUP ]
-      [ OWNER ] [ ABOUT ]
-      [ SUPPORT ] [ UPDATE ]
-      [ HELP AND COMMANDS ]
-      [ SOURCE ]
-    """
     owner = getattr(console, "OWNER_USERNAME", "") or ""
     support = getattr(console, "SUPPORT_CHAT", "") or ""
     channel = getattr(console, "SUPPORT_CHANNEL", "") or ""
 
-    # Owner button
     if owner:
         owner_btn = _btn(smallcaps("owner"), _PRIMARY, url=f"https://t.me/{owner}")
     elif getattr(console, "OWNER_ID", 0):
@@ -124,7 +116,6 @@ def start_markup(bot_username: str) -> InlineKeyboardMarkup:
     else:
         owner_btn = _btn(smallcaps("owner"), _PRIMARY, callback_data="about_menu")
 
-    # Support button
     if support:
         support_btn = _btn(
             smallcaps("support"), _SUCCESS, url=f"https://t.me/{support}"
@@ -134,7 +125,6 @@ def start_markup(bot_username: str) -> InlineKeyboardMarkup:
             smallcaps("support"), _SUCCESS, callback_data="support_alert"
         )
 
-    # Update / channel button
     if channel:
         update_btn = _btn(
             smallcaps("update"), _PRIMARY, url=f"https://t.me/{channel}"
@@ -262,6 +252,10 @@ async def _edit_menu(query, caption: str, markup: InlineKeyboardMarkup):
 
 @bot.on_message(cdx(["start", "help"]))
 async def start_message_private(client, message):
+    # Hard block non-owner during maintenance
+    if await block_if_maintenance(message):
+        return
+
     try:
         await add_served_user(message.from_user.id)
     except Exception:
@@ -319,11 +313,15 @@ async def start_message_private(client, message):
 
 @bot.on_callback_query(rgx("repo_alert"))
 async def repo_alert_cb(client, query):
+    if await block_cb_if_maintenance(query):
+        return
     await query.answer(smallcaps("repo private hai") + " 🔒", show_alert=True)
 
 
 @bot.on_callback_query(rgx("support_alert"))
 async def support_alert_cb(client, query):
+    if await block_cb_if_maintenance(query):
+        return
     await query.answer(
         smallcaps("support chat set nahi hai config me"), show_alert=True
     )
@@ -331,6 +329,8 @@ async def support_alert_cb(client, query):
 
 @bot.on_callback_query(rgx("update_alert"))
 async def update_alert_cb(client, query):
+    if await block_cb_if_maintenance(query):
+        return
     await query.answer(
         smallcaps("update channel set nahi hai config me"), show_alert=True
     )
@@ -338,18 +338,24 @@ async def update_alert_cb(client, query):
 
 @bot.on_callback_query(rgx("about_menu"))
 async def about_menu_cb(client, query):
+    if await block_cb_if_maintenance(query):
+        return
     await _edit_menu(query, about_caption(), about_markup())
     await query.answer()
 
 
 @bot.on_callback_query(rgx("help_menu"))
 async def help_menu_cb(client, query):
+    if await block_cb_if_maintenance(query):
+        return
     await _edit_menu(query, help_list_caption(), help_menu_markup())
     await query.answer()
 
 
 @bot.on_callback_query(rgx(r"^cmdhelp\|"))
 async def cmd_help_cb(client, query):
+    if await block_cb_if_maintenance(query):
+        return
     try:
         key = query.data.split("|", 1)[1].strip().lower()
     except Exception:
@@ -364,6 +370,8 @@ async def cmd_help_cb(client, query):
 
 @bot.on_callback_query(rgx("home_menu"))
 async def home_menu_cb(client, query):
+    if await block_cb_if_maintenance(query):
+        return
     mention = query.from_user.mention if query.from_user else "User"
     await _edit_menu(
         query, start_caption(mention), start_markup(client.me.username)
