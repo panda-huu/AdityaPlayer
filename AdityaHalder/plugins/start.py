@@ -58,6 +58,10 @@ CHATBOT_COMMANDS = [
     ("chatoff", "/chatoff"),
 ]
 
+ABUSE_COMMANDS = [
+    ("noabuse", "/noabuse"),
+]
+
 CMD_USAGE = {
     "play": (
         f"{smallcaps('command')}: /play\n\n"
@@ -158,6 +162,14 @@ CMD_USAGE = {
         f"{smallcaps('disables chatbot in this chat.')}\n"
         f"{smallcaps('group: admin only.')}"
     ),
+    "noabuse": (
+        f"{smallcaps('command')}: /noabuse\n\n"
+        f"{smallcaps('use')}:\n"
+        f"• /noabuse on\n"
+        f"• /noabuse off\n\n"
+        f"{smallcaps('auto deletes abusive messages in group.')}\n"
+        f"{smallcaps('admin only. bot needs delete messages right.')}"
+    ),
 }
 
 
@@ -239,11 +251,15 @@ def help_menu_markup() -> InlineKeyboardMarkup:
     if row:
         rows.append(row)
 
-    # Extra category buttons
     rows.append(
         [
             _btn(smallcaps("action"), _DANGER, callback_data="action_menu"),
             _btn(smallcaps("chatbot"), _SUCCESS, callback_data="chatbot_menu"),
+        ]
+    )
+    rows.append(
+        [
+            _btn(smallcaps("abuse"), _DANGER, callback_data="abuse_menu"),
         ]
     )
     rows.append(
@@ -274,17 +290,32 @@ def action_menu_markup() -> InlineKeyboardMarkup:
 
 
 def chatbot_menu_markup() -> InlineKeyboardMarkup:
-    rows = [
+    return InlineKeyboardMarkup(
         [
-            _btn(smallcaps("chaton"), _SUCCESS, callback_data="cmdhelp|chaton"),
-            _btn(smallcaps("chatoff"), _DANGER, callback_data="cmdhelp|chatoff"),
-        ],
+            [
+                _btn(smallcaps("chaton"), _SUCCESS, callback_data="cmdhelp|chaton"),
+                _btn(smallcaps("chatoff"), _DANGER, callback_data="cmdhelp|chatoff"),
+            ],
+            [
+                _btn(smallcaps("📋 commands"), _SUCCESS, callback_data="help_menu"),
+                _btn(smallcaps("🔙 start"), _DANGER, callback_data="home_menu"),
+            ],
+        ]
+    )
+
+
+def abuse_menu_markup() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
         [
-            _btn(smallcaps("📋 commands"), _SUCCESS, callback_data="help_menu"),
-            _btn(smallcaps("🔙 start"), _DANGER, callback_data="home_menu"),
-        ],
-    ]
-    return InlineKeyboardMarkup(rows)
+            [
+                _btn(smallcaps("noabuse"), _DANGER, callback_data="cmdhelp|noabuse"),
+            ],
+            [
+                _btn(smallcaps("📋 commands"), _SUCCESS, callback_data="help_menu"),
+                _btn(smallcaps("🔙 start"), _DANGER, callback_data="home_menu"),
+            ],
+        ]
+    )
 
 
 def cmd_help_markup() -> InlineKeyboardMarkup:
@@ -321,7 +352,8 @@ def help_list_caption() -> str:
         f"{smallcaps('help menu')}\n\n"
         f"{smallcaps('tap any command button below to see how to use it.')}\n"
         f"{smallcaps('action = mute ban kick etc.')}\n"
-        f"{smallcaps('chatbot = chaton chatoff')}"
+        f"{smallcaps('chatbot = chaton chatoff')}\n"
+        f"{smallcaps('abuse = noabuse filter')}"
     )
     return f"<blockquote expandable>{body}</blockquote>"
 
@@ -340,6 +372,15 @@ def chatbot_list_caption() -> str:
         f"{smallcaps('chatbot commands')}\n\n"
         f"{smallcaps('enable or disable ai chat in this chat.')}\n"
         f"{smallcaps('tap a button to see usage.')}"
+    )
+    return f"<blockquote expandable>{body}</blockquote>"
+
+
+def abuse_list_caption() -> str:
+    body = (
+        f"{smallcaps('abuse filter')}\n\n"
+        f"{smallcaps('auto delete bad words in group.')}\n"
+        f"{smallcaps('tap noabuse to see usage.')}"
     )
     return f"<blockquote expandable>{body}</blockquote>"
 
@@ -488,6 +529,14 @@ async def chatbot_menu_cb(client, query):
     if await block_cb_if_maintenance(query):
         return
     await _edit_menu(query, chatbot_list_caption(), chatbot_menu_markup())
+    await query.answer()
+
+
+@bot.on_callback_query(rgx("abuse_menu"))
+async def abuse_menu_cb(client, query):
+    if await block_cb_if_maintenance(query):
+        return
+    await _edit_menu(query, abuse_list_caption(), abuse_menu_markup())
     await query.answer()
 
 
