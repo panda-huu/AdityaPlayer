@@ -49,6 +49,9 @@ IGNORED_CMDS = [
     "unban",
     "kick",
     "noabuse",
+    "welcome",
+    "setwelcome",
+    "resetwelcome",
 ]
 
 
@@ -162,7 +165,6 @@ async def chatbot_reply(client, message: Message):
     if not message.text:
         return
 
-    # Skip any slash commands
     if message.text.startswith(("/", "!", ".")):
         return
 
