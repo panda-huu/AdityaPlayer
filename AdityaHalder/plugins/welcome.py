@@ -1,7 +1,7 @@
 # ---------------------------------------------------------------
 # AdityaHalder — welcome.py
 # /welcome on|off  |  /setwelcome  |  /resetwelcome
-# Custom text + photo + inline buttons
+# Custom text + photo/video + inline buttons
 # ---------------------------------------------------------------
 
 print("[welcome] loading plugin...", flush=True)
@@ -37,7 +37,6 @@ DEFAULT_TEXT = (
     "🌸✨ ──────────────────── ✨🌸"
 )
 
-# Button pattern: [Text](buttonurl:https://example.com)
 _BTN_RE = re.compile(
     r"\[([^\]]+)\]\(buttonurl:(https?://[^\s\)]+)\)",
     re.IGNORECASE,
@@ -62,19 +61,34 @@ def _save_db(data: dict):
         print(f"[welcome] save error: {e}", flush=True)
 
 
+def _default_cfg():
+    return {
+        "enabled": True,
+        "text": None,
+        "media": None,       # file_id
+        "media_type": None,  # photo | video | animation
+        "buttons": [],
+    }
+
+
 def _chat_cfg(chat_id: int) -> dict:
     db = _load_db()
     key = str(chat_id)
     if key not in db:
-        db[key] = {"enabled": True, "text": None, "photo": None, "buttons": []}
+        db[key] = _default_cfg()
         _save_db(db)
-    return db[key]
+    cfg = db[key]
+    # migrate old "photo" key
+    if cfg.get("photo") and not cfg.get("media"):
+        cfg["media"] = cfg["photo"]
+        cfg["media_type"] = "photo"
+    return cfg
 
 
 def _set_chat_cfg(chat_id: int, **kwargs):
     db = _load_db()
     key = str(chat_id)
-    cfg = db.get(key) or {"enabled": True, "text": None, "photo": None, "buttons": []}
+    cfg = db.get(key) or _default_cfg()
     cfg.update(kwargs)
     db[key] = cfg
     _save_db(db)
@@ -85,21 +99,18 @@ def is_enabled(chat_id: int) -> bool:
 
 
 def parse_buttons(text: str):
-    """Extract [label](buttonurl:url) and return (clean_text, buttons_list)."""
     if not text:
         return text, []
     buttons = []
     for m in _BTN_RE.finditer(text):
         buttons.append({"text": m.group(1).strip(), "url": m.group(2).strip()})
     clean = _BTN_RE.sub("", text).strip()
-    # collapse extra blank lines
     clean = re.sub(r"\n{3,}", "\n\n", clean)
     return clean, buttons
 
 
 def build_markup(buttons: list):
     if not buttons:
-        # default update button if channel set
         channel = (getattr(console, "SUPPORT_CHANNEL", "") or "").lstrip("@")
         if channel:
             return InlineKeyboardMarkup(
@@ -170,6 +181,49 @@ async def _delete_later(msg, delay: int):
         pass
 
 
+async def _send_welcome(client, chat_id, caption, media, media_type, markup):
+    if media and media_type == "video":
+        return await client.send_video(
+            chat_id,
+            video=media,
+            caption=caption,
+            parse_mode=ParseMode.HTML,
+            reply_markup=markup,
+        )
+    if media and media_type == "animation":
+        return await client.send_animation(
+            chat_id,
+            animation=media,
+            caption=caption,
+            parse_mode=ParseMode.HTML,
+            reply_markup=markup,
+        )
+    if media and media_type == "photo":
+        return await client.send_photo(
+            chat_id,
+            photo=media,
+            caption=caption,
+            parse_mode=ParseMode.HTML,
+            reply_markup=markup,
+        )
+    # default random image
+    try:
+        return await client.send_photo(
+            chat_id,
+            photo=random.choice(DEFAULT_IMAGES),
+            caption=caption,
+            parse_mode=ParseMode.HTML,
+            reply_markup=markup,
+        )
+    except Exception:
+        return await client.send_message(
+            chat_id,
+            caption,
+            parse_mode=ParseMode.HTML,
+            reply_markup=markup,
+        )
+
+
 # ── /welcome on|off ───────────────────────────────────────────
 
 @bot.on_message(
@@ -200,7 +254,7 @@ async def welcome_toggle(client, msg: Message):
             f"<b>👋 Welcome Status:</b> {status}\n\n"
             f"➻ /welcome on\n"
             f"➻ /welcome off\n"
-            f"➻ /setwelcome — set custom message\n"
+            f"➻ /setwelcome — set custom message (text/photo/video)\n"
             f"➻ /resetwelcome — reset to default",
         )
 
@@ -233,35 +287,42 @@ async def set_welcome(client, msg: Message):
     if not await is_admin(client, chat_id, msg.from_user.id):
         return await _send(client, chat_id, "❌ <b>Only admins can set welcome!</b>")
 
-    photo = None
+    media = None
+    media_type = None
     raw_text = None
 
-    # Reply to photo / media with caption
     if msg.reply_to_message:
         r = msg.reply_to_message
-        if r.photo:
-            photo = r.photo.file_id
+        if r.video:
+            media = r.video.file_id
+            media_type = "video"
+            raw_text = r.caption or ""
+        elif r.animation:
+            media = r.animation.file_id
+            media_type = "animation"
+            raw_text = r.caption or ""
+        elif r.photo:
+            media = r.photo.file_id
+            media_type = "photo"
             raw_text = r.caption or ""
         elif r.text:
             raw_text = r.text
         elif r.caption:
             raw_text = r.caption
-            if r.photo:
-                photo = r.photo.file_id
 
-    # Or text after command: /setwelcome hello {name}
     if raw_text is None:
         parts = (msg.text or "").split(None, 1)
         if len(parts) > 1:
             raw_text = parts[1]
 
-    if not raw_text and not photo:
+    if not raw_text and not media:
         return await _send(
             client,
             chat_id,
             "❌ <b>Usage:</b>\n\n"
             "• <code>/setwelcome Welcome {name}</code>\n"
-            "• Reply to a photo with <code>/setwelcome</code>\n"
+            "• Reply to a <b>photo</b> with <code>/setwelcome</code>\n"
+            "• Reply to a <b>video / gif</b> with <code>/setwelcome</code>\n"
             "• Reply to text with <code>/setwelcome</code>\n\n"
             "<b>Placeholders:</b>\n"
             "{name} {fullname} {id} {mention} {username} {chat}\n\n"
@@ -274,15 +335,18 @@ async def set_welcome(client, msg: Message):
         chat_id,
         enabled=True,
         text=clean or None,
-        photo=photo,
+        media=media,
+        media_type=media_type,
+        photo=None,  # clear old key
         buttons=buttons,
     )
 
+    media_label = media_type or "None"
     await _send(
         client,
         chat_id,
         "✅ <b>Welcome message set!</b>\n\n"
-        f"Photo: {'Yes' if photo else 'No'}\n"
+        f"Media: <code>{media_label}</code>\n"
         f"Buttons: {len(buttons)}\n"
         f"Text preview:\n<code>{(clean or DEFAULT_TEXT)[:200]}</code>",
     )
@@ -309,7 +373,15 @@ async def reset_welcome(client, msg: Message):
     if not await is_admin(client, chat_id, msg.from_user.id):
         return await _send(client, chat_id, "❌ <b>Only admins can reset welcome!</b>")
 
-    _set_chat_cfg(chat_id, text=None, photo=None, buttons=[], enabled=True)
+    _set_chat_cfg(
+        chat_id,
+        text=None,
+        media=None,
+        media_type=None,
+        photo=None,
+        buttons=[],
+        enabled=True,
+    )
     await _send(client, chat_id, "✅ <b>Welcome reset to default!</b>")
 
 
@@ -338,38 +410,15 @@ async def welcome_new_member(client, message: Message):
 
         template = cfg.get("text") or DEFAULT_TEXT
         caption = format_welcome(template, user, chat_title)
-        photo = cfg.get("photo")
+        media = cfg.get("media") or cfg.get("photo")
+        media_type = cfg.get("media_type") or ("photo" if media else None)
         buttons = cfg.get("buttons") or []
         markup = build_markup(buttons)
 
         try:
-            if photo:
-                wel = await client.send_photo(
-                    chat_id,
-                    photo=photo,
-                    caption=caption,
-                    parse_mode=ParseMode.HTML,
-                    reply_markup=markup,
-                )
-            else:
-                # default random image if no custom photo
-                try:
-                    wel = await client.send_photo(
-                        chat_id,
-                        photo=random.choice(DEFAULT_IMAGES),
-                        caption=caption,
-                        parse_mode=ParseMode.HTML,
-                        reply_markup=markup,
-                    )
-                except Exception:
-                    wel = await client.send_message(
-                        chat_id,
-                        caption,
-                        parse_mode=ParseMode.HTML,
-                        reply_markup=markup,
-                    )
-
-            # auto delete after 5 minutes
+            wel = await _send_welcome(
+                client, chat_id, caption, media, media_type, markup
+            )
             asyncio.create_task(_delete_later(wel, 300))
         except Exception:
             print("[welcome] send failed:", flush=True)
