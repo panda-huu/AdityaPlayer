@@ -1,11 +1,26 @@
-from pyrogram import filters, StopPropagation, ContinuePropagation
-from pyrogram.types import Message
+from pyrogram import filters
+from pyrogram.types import Message, CallbackQuery
+
+try:
+    from pyrogram import StopPropagation, ContinuePropagation
+except ImportError:
+    try:
+        from pyrogram.errors import StopPropagation, ContinuePropagation
+    except ImportError:
+
+        class StopPropagation(Exception):
+            pass
+
+        class ContinuePropagation(Exception):
+            pass
 
 from .. import bot, cdx, console
 
-# ── Maintenance state ─────────────────────────────────────────────────────
-MAINTENANCE_MODE: bool = False
-MAINTENANCE_MSG: str = (
+# Shared state on console so every plugin sees same value
+if not hasattr(console, "MAINTENANCE_MODE"):
+    console.MAINTENANCE_MODE = False
+
+MAINTENANCE_MSG = (
     "🛠 **Bot is currently under maintenance.**\n"
     "Please try again later."
 )
@@ -19,16 +34,26 @@ def _is_sudo(user_id: int) -> bool:
     if user_id == getattr(console, "OWNER_ID", 0):
         return True
     try:
-        return user_id in console.sudoers
+        sudoers = console.sudoers
+        # filters.user() — check internal users set if present
+        users = getattr(sudoers, "users", None) or getattr(sudoers, "user_ids", None)
+        if users is not None:
+            return user_id in users
+        return user_id in sudoers
     except Exception:
         return False
 
 
-# ── /maintenance on | off (owner/sudo, private chat only) ─────────────────
+def _is_command(text: str) -> bool:
+    if not text:
+        return False
+    t = text.strip()
+    return t.startswith(PREFIXES)
+
+
+# ── /maintenance on | off (owner/sudo, private only) ──────────────────────
 @bot.on_message(cdx("maintenance") & filters.private, group=1)
 async def maintenance_toggle(client, message: Message):
-    global MAINTENANCE_MODE
-
     if message.from_user is None or not _is_sudo(message.from_user.id):
         return await message.reply_text(
             "❌ Yeh command sirf bot owner/sudo users use kar sakte hain."
@@ -36,7 +61,7 @@ async def maintenance_toggle(client, message: Message):
 
     args = (message.text or "").split(None, 1)
     if len(args) < 2:
-        status = "ON ✅" if MAINTENANCE_MODE else "OFF ❌"
+        status = "ON ✅" if console.MAINTENANCE_MODE else "OFF ❌"
         return await message.reply_text(
             f"🛠 **Maintenance Mode:** {status}\n\n"
             "Usage:\n"
@@ -47,15 +72,15 @@ async def maintenance_toggle(client, message: Message):
     state = args[1].strip().lower()
 
     if state in ("on", "true", "enable", "1"):
-        MAINTENANCE_MODE = True
+        console.MAINTENANCE_MODE = True
         await message.reply_text(
-            "✅ **Maintenance mode ON kar diya gaya hai.**\n"
+            "✅ **Maintenance mode ON.**\n"
             "Ab sirf owner/sudo users hi bot use kar sakte hain."
         )
     elif state in ("off", "false", "disable", "0"):
-        MAINTENANCE_MODE = False
+        console.MAINTENANCE_MODE = False
         await message.reply_text(
-            "✅ **Maintenance mode OFF kar diya gaya hai.**\n"
+            "✅ **Maintenance mode OFF.**\n"
             "Bot ab normal kaam karega."
         )
     else:
@@ -64,31 +89,41 @@ async def maintenance_toggle(client, message: Message):
         )
 
 
-# ── Global blocker — sabse pehle (group=-1) ───────────────────────────────
-@bot.on_message(filters.text, group=-1)
+# ── Global command blocker (runs FIRST) ───────────────────────────────────
+@bot.on_message(filters.text & filters.incoming, group=-999)
 async def maintenance_blocker(client, message: Message):
-    if not MAINTENANCE_MODE:
-        raise ContinuePropagation
+    if not getattr(console, "MAINTENANCE_MODE", False):
+        return
 
-    text = message.text or ""
-    if not text.startswith(PREFIXES):
-        raise ContinuePropagation
+    if not _is_command(message.text or ""):
+        return
 
-    if message.from_user and _is_sudo(message.from_user.id):
-        raise ContinuePropagation
+    uid = message.from_user.id if message.from_user else 0
+    if _is_sudo(uid):
+        return
 
-    # allow /maintenance itself for non-sudo only to show status? No — only sudo can use it.
-    # Still block all other commands for normal users.
+    # allow nothing for normal users — even /maintenance
     try:
-        cmd = text.split()[0][1:].split("@")[0].lower()
-    except Exception:
-        cmd = ""
-
-    if cmd == "maintenance":
-        # non-sudo tries /maintenance → still block with maintenance msg
-        # (toggle handler is private+sudo only)
         await message.reply_text(MAINTENANCE_MSG)
-        raise StopPropagation
+    except Exception:
+        pass
 
-    await message.reply_text(MAINTENANCE_MSG)
+    raise StopPropagation
+
+
+# ── Block inline button callbacks too ─────────────────────────────────────
+@bot.on_callback_query(group=-999)
+async def maintenance_callback_blocker(client, query: CallbackQuery):
+    if not getattr(console, "MAINTENANCE_MODE", False):
+        return
+
+    uid = query.from_user.id if query.from_user else 0
+    if _is_sudo(uid):
+        return
+
+    try:
+        await query.answer("🛠 Bot under maintenance.", show_alert=True)
+    except Exception:
+        pass
+
     raise StopPropagation
