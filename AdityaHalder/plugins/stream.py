@@ -19,6 +19,7 @@ from pytgcalls.types import AudioQuality, VideoQuality
 from youtubesearchpython.__future__ import VideosSearch
 
 from ..modules.formatters import panel_caption, queue_caption
+from .maintenance import block_if_maintenance
 
 import tempfile
 import os
@@ -377,6 +378,9 @@ async def make_thumbnail(image, title, channel, duration, output):
 
 @bot.on_message(cdz(["play", "vplay"]) & ~filters.private)
 async def start_stream_in_vc(client, message):
+    if await block_if_maintenance(message):
+        return
+
     import traceback
     import time
     from pytgcalls.types import MediaStream, AudioQuality
